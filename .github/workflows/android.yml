@@ -22,7 +22,7 @@ jobs:
           gradle-version: "8.9"
       - name: Build APK
         env:
-          BIDSAARTHI_BACKEND_URL: ${{ secrets.BIDSAARTHI_BACKEND_URL }}
+          BIDSAARTHI_BACKEND_URL: https://bidsaarthi-ai.onrender.com
         run: gradle --no-daemon --no-build-cache clean :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
