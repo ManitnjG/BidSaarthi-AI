@@ -7,12 +7,14 @@ import com.bidsaarthi.ai.model.Tender
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 data class SourceSync(val source:TenderSource,val tenders:List<Tender>,val error:String?=null)
 
 class TenderRepository(private val context:Context) {
  suspend fun syncAll():List<SourceSync> = withContext(Dispatchers.IO) {
-  val raw=context.assets.open("tenders.json").bufferedReader().use{it.readText()}
+  val raw=try { OkHttpClient().newCall(Request.Builder().url("https://raw.githubusercontent.com/ManitnjG/BidSaarthi-AI/main/app/src/main/assets/tenders.json").build()).execute().use { r -> if(!r.isSuccessful) error("HTTP "+r.code); r.body?.string().orEmpty() } } catch(_:Exception) { context.assets.open("tenders.json").bufferedReader().use{it.readText()} }
   val a=JSONArray(raw)
   val grouped=mutableMapOf<String,MutableList<Tender>>()
   for(i in 0 until a.length()){
