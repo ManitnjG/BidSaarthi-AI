@@ -22,7 +22,7 @@ class TenderRepository(private val context:Context) {
    val source=TenderSources.all.firstOrNull{it.id==sid}?:continue
    grouped.getOrPut(sid){mutableListOf()}.add(Tender(
     id=o.optString("id"),title=o.optString("title"),department=o.optString("department",source.name),
-    location=o.optString("location","India"),value=o.optString("value","Refer official tender document"),
+    location=o.optString("location","India"),value=if(o.isNull("value")) "Refer official tender document" else o.optString("value","Refer official tender document"),
     deadline=o.optString("closes_at"),source=source.name,url=o.optString("source_url",source.baseUrl),readiness=0,
     summary=listOf(o.optString("reference_no"),"Official public listing").filter{it.isNotBlank()}.joinToString(" • "),
     requirements=listOf(Requirement("Verify original tender document",RequirementStatus.VERIFY))
