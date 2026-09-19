@@ -17,17 +17,10 @@ android {
         versionCode = 3
         versionName = "0.3.0"
     }
-    signingConfigs {
-        create("debugConfig") {
-            storeFile = file("${rootDir}/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
-    }
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("debugConfig")
+            // Use Android Gradle Plugin's standard debug signing key.
+            // CI generates ~/.android/debug.keystore automatically when required.
         }
     }
     buildFeatures {
