@@ -1,12 +1,14 @@
 name: Build Android APK
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "*/15 * * * *"
+
 permissions:
   contents: write
+
 jobs:
   build:
     if: github.event_name != 'schedule'
@@ -34,6 +36,7 @@ jobs:
         run: |
           TAG="build-${{ github.run_number }}"
           gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --title "BidSaarthi AI Build ${{ github.run_number }}" --notes "Automated Android debug build."
+
   collect-real-tenders:
     runs-on: ubuntu-latest
     steps:
@@ -41,30 +44,43 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install collector
+      - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
       - name: Run backend tests
         run: PYTHONPATH=backend pytest -q backend/tests
       - name: Collect official public tender listings
         run: |
           python - <<'PY'
-          import asyncio,json,sys
-          sys.path.insert(0,"backend")
+          import asyncio, json, sys
+          sys.path.insert(0, "backend")
           from app.collector import collect_all
+
           async def run():
-              results=await collect_all()
-              rows=[]
-              status=[]
-              for r in results:
-                  status.append({"source":r["source"],"status":r["status"],"count":len(r["items"]),"error":r.get("error")})
-                  rows += [x.model_dump() for x in r["items"]]
-              with open("app/src/main/assets/tenders.json","w") as f: json.dump(rows,f,ensure_ascii=False)
-              with open("app/src/main/assets/source_status.json","w") as f: json.dump(status,f,ensure_ascii=False)
+              results = await collect_all()
+              rows, status = [], []
+              for result in results:
+                  status.append({
+                      "source": result["source"],
+                      "status": result["status"],
+                      "count": len(result["items"]),
+                      "error": result.get("error")
+                  })
+                  rows.extend(x.model_dump() for x in result["items"])
+              with open("app/src/main/assets/tenders.json", "w") as fh:
+                  json.dump(rows, fh, ensure_ascii=False)
+              with open("app/src/main/assets/source_status.json", "w") as fh:
+                  json.dump(status, fh, ensure_ascii=False)
               print(status)
-              if not rows: raise SystemExit("No real tender listings collected")
+              if not rows:
+                  raise SystemExit("No real tender listings collected")
+
           asyncio.run(run())
           PY
-      - name: Generate AI analysis cache\n        env:\n          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}\n        run: |\n          PYTHONPATH=backend python backend/scripts/generate_analysis.py\n      - name: Commit refreshed tender data
+      - name: Generate AI analysis cache
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: PYTHONPATH=backend python backend/scripts/generate_analysis.py
+      - name: Commit refreshed tender data
         run: |
           git config user.name "BidSaarthi Bot"
           git config user.email "actions@users.noreply.github.com"
