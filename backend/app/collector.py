@@ -58,11 +58,23 @@ def parse(source,html):
    evidence=" | ".join(vals)[:4000];digest=hashlib.sha256(f"{source.id}|{title}|{ref}|{closes}".encode()).hexdigest()
    out.append(Tender(id=digest[:24],source_id=source.id,source_url=href,title=title[:500],department=source.name,reference_no=ref,location="Tamil Nadu" if source.id=="tn" else "India",closes_at=closes,opens_at=opens,content_hash=digest,evidence={"listing":evidence},confidence=.95))
  return list({(x.source_id,x.reference_no or x.id):x for x in out}.values())[:100]
+ENDPOINTS={
+ "cppp":["https://eprocure.gov.in/eprocure/app?component=view&page=Home&service=direct","https://eprocure.gov.in/epublish/app?page=FrontEndLatestActiveTenders&service=page"],
+ "tn":["https://tntenders.gov.in/nicgep/app?component=view&page=Home&service=direct"],
+ "maha":["https://mahatenders.gov.in/nicgep/app?component=view&page=Home&service=direct"],
+ "kerala":["https://etenders.kerala.gov.in/nicgep/app?component=view&page=Home&service=direct"],
+}
 async def one(client,s):
  if s.mode==Mode.LINK_ONLY:return {"source":s.id,"status":"LINK_ONLY","items":[]}
- try:
-  r=await client.get(s.url,follow_redirects=True);r.raise_for_status();items=parse(s,r.text)
-  return {"source":s.id,"status":"LIVE" if items else "EMPTY","items":items}
- except Exception as e:return {"source":s.id,"status":"DEGRADED","error":str(e)[:180],"items":[]}
+ errors=[]
+ for url in ENDPOINTS.get(s.id,[s.url]):
+  try:
+   r=await client.get(url,follow_redirects=True);r.raise_for_status()
+   proxy=type("SourceView",(),{"id":s.id,"name":s.name,"url":url})()
+   items=parse(proxy,r.text)
+   if items:return {"source":s.id,"status":"LIVE","items":items,"endpoint":url}
+   errors.append("no validated tender rows at "+url)
+  except Exception as e:errors.append(str(e)[:120])
+ return {"source":s.id,"status":"EMPTY" if errors and all(x.startswith("no validated") for x in errors) else "DEGRADED","error":"; ".join(errors)[:500],"items":[]}
 async def collect_all():
  async with httpx.AsyncClient(timeout=30,headers={"User-Agent":UA,"Accept":"text/html,application/xhtml+xml"},limits=httpx.Limits(max_connections=4)) as c:return await asyncio.gather(*(one(c,s) for s in SOURCES))
