@@ -143,7 +143,7 @@ class MainActivity: ComponentActivity() {
   LazyColumn(Modifier.fillMaxWidth().padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=36.dp)) {
    item { Text(t.title,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);Text(t.department);Text("Deadline: ${t.deadline}") }
    item { Text("Reference: ${t.summary}",style=MaterialTheme.typography.bodySmall)
-    Button(onClick={runCatching { val uri=Uri.parse(t.url);require(uri.scheme=="https" || uri.scheme=="http");ctx.startActivity(Intent(Intent.ACTION_VIEW,uri)) }.onFailure { error="Could not open the official link." }},modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.OpenInNew,null);Spacer(Modifier.width(8.dp));Text("Open official notice") }
+    Button(onClick={runCatching { val uri=Uri.parse(t.url);require(uri.scheme=="https" || uri.scheme=="http");ctx.startActivity(Intent(Intent.ACTION_VIEW,uri)) }.onFailure { error="Could not open the official link." }},modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.OpenInNew,null);Spacer(Modifier.width(8.dp));Text(if(t.url.contains("tendersfullview",true) || t.url.contains("directlink",true) || t.url.contains("/tender/",true)) "Open official notice" else "Open source portal") }
    }
    item { HorizontalDivider();Text("Evidence-based analysis",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
     Text("Analysis uses available listing text. Full tender documents must be checked for eligibility, EMD, exemptions and amendments.",style=MaterialTheme.typography.bodySmall)

@@ -37,6 +37,8 @@ class TenderRepository(private val context: Context) {
 
                 var sourceId = obj.optString("source_id", "cppp")
                 val exactUrl = obj.optString("source_url")
+                // Historic bundled entries without captured evidence cannot be verified.
+                if (obj.optJSONObject("evidence")?.optString("listing").isNullOrBlank()) continue
                 val refNo = obj.optString("reference_no")
                 val title = obj.optString("title")
                 val dept = obj.optString("department")

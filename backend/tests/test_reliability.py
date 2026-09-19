@@ -49,3 +49,9 @@ def test_unconfigured_ai_returns_honest_unknown(monkeypatch):
         assert response.status_code == 200
         assert response.json()['eligibility'] == 'UNKNOWN'
         assert response.json()['confidence'] == 0
+
+
+def test_cppp_closing_date_is_not_opening_date():
+    html = '''<table><tr><td>1</td><td>20-Sep-2026 10:00 AM</td><td>26-Sep-2026 05:30 PM</td><td>27-Sep-2026 11:00 AM</td><td><a href="/cppp/tendersfullview/1">Solar installation/REF001/TENDER001</a></td><td>Central Department</td></tr></table>'''
+    row = parse(SOURCES[0], html)[0]
+    assert row.closes_at == '26-Sep-2026 05:30 PM'

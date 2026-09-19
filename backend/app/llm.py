@@ -88,5 +88,10 @@ async def analyze(t,b=None):
    opportunity_score=score,summary=s.get("summary") or t.title,risks=s.get("risks",[]),
    evidence=s.get("evidence",{}),confidence=confidence)
  except Exception as e:
-  return Analysis(tender_id=t.id,eligibility_reasons=["AI analysis unavailable"],summary=t.title,
+  reason = "AI analysis unavailable"
+  if isinstance(e, httpx.HTTPStatusError):
+   code = e.response.status_code
+   reason = {401: "AI provider rejected the server API key", 403: "AI provider access denied", 429: "AI provider quota or rate limit reached", 400: "AI provider rejected the configured model or request", 404: "Configured AI endpoint or model was not found"}.get(code, "AI provider unavailable (HTTP " + str(code) + ")")
+  elif isinstance(e, httpx.TimeoutException): reason = "AI provider timed out; please retry"
+  return Analysis(tender_id=t.id,eligibility_reasons=[reason],summary=t.title,
    risks=["Analysis service error; verify the official tender"],evidence={},confidence=0)

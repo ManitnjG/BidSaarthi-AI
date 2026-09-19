@@ -4,6 +4,7 @@ class Mode(str,Enum): HTML="HTML"; API="API"; LINK_ONLY="LINK_ONLY"
 @dataclass(frozen=True)
 class Source: id:str; name:str; url:str; mode:Mode
 SOURCES=[
+ Source("state","State eProcurement (MMP)","https://eprocure.gov.in/cppp/latestactivetendersnew/mmpdata",Mode.HTML),
  Source("cppp","CPPP / Central eProcurement","https://eprocure.gov.in/eprocure/app",Mode.HTML),
  Source("tn","Tamil Nadu eProcurement","https://tntenders.gov.in/nicgep/app",Mode.HTML),
  Source("gem","Government e-Marketplace","https://gem.gov.in",Mode.LINK_ONLY),

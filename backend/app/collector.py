@@ -48,7 +48,7 @@ def parse(source,html):
     title=candidates[-1] if candidates else ""
    if len(title)<8 or clean(title).lower().lstrip("0123456789. ") in nav_titles:continue
    if not ref or len(ref)<3:continue
-   closes=DATE.search(vals[ci]).group(0) if ci is not None and ci<len(vals) and DATE.search(vals[ci]) else dates[-1]
+   closes=DATE.search(vals[ci]).group(0) if ci is not None and ci<len(vals) and DATE.search(vals[ci]) else (DATE.search(vals[2]).group(0) if len(vals)>=6 and DATE.search(vals[2]) else dates[-1])
    opens=DATE.search(vals[oi]).group(0) if oi is not None and oi<len(vals) and DATE.search(vals[oi]) else None
    if not ref:
     candidates=[v for v in vals if v!=title and not DATE.search(v) and 4<=len(v)<=120 and not any(x in v.lower() for x in ("mis reports","tenders by","downloads","site compatibility"))]
@@ -59,7 +59,8 @@ def parse(source,html):
    out.append(Tender(id=hashlib.sha256(f"{source.id}|{ref}".encode()).hexdigest()[:24],source_id=source.id,source_url=href,title=title[:500],department=source.name,reference_no=ref,location="Tamil Nadu" if source.id=="tn" else "India",closes_at=closes,opens_at=opens,content_hash=digest,evidence={"listing":evidence},confidence=.95))
  return list({(x.source_id,x.reference_no or x.id):x for x in out}.values())[:100]
 ENDPOINTS={
- "cppp":["https://eprocure.gov.in/eprocure/app?component=view&page=Home&service=direct","https://eprocure.gov.in/epublish/app?page=FrontEndLatestActiveTenders&service=page"],
+ "state":["https://eprocure.gov.in/cppp/latestactivetendersnew/mmpdata"],
+ "cppp":["https://eprocure.gov.in/cppp/latestactivetendersnew/cpppdata","https://eprocure.gov.in/eprocure/app?component=view&page=Home&service=direct","https://eprocure.gov.in/epublish/app?page=FrontEndLatestActiveTenders&service=page"],
  "tn":["https://tntenders.gov.in/nicgep/app?component=view&page=Home&service=direct"],
  "maha":["https://mahatenders.gov.in/nicgep/app?component=view&page=Home&service=direct"],
  "kerala":["https://etenders.kerala.gov.in/nicgep/app?component=view&page=Home&service=direct"],
