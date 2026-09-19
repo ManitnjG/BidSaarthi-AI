@@ -64,10 +64,10 @@ jobs:
               if not rows: raise SystemExit("No real tender listings collected")
           asyncio.run(run())
           PY
-      - name: Commit refreshed tender data
+      - name: Generate AI analysis cache\n        env:\n          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}\n        run: |\n          PYTHONPATH=backend python backend/scripts/generate_analysis.py\n      - name: Commit refreshed tender data
         run: |
           git config user.name "BidSaarthi Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add app/src/main/assets/tenders.json app/src/main/assets/source_status.json
+          git add app/src/main/assets/tenders.json app/src/main/assets/source_status.json app/src/main/assets/analysis.json
           git diff --cached --quiet || git commit -m "data: refresh official tender listings [skip ci]"
           git push
