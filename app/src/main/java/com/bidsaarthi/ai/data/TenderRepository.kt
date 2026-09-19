@@ -17,7 +17,9 @@ class TenderRepository(private val context:Context) {
   val raw=try { OkHttpClient().newCall(Request.Builder().url("https://raw.githubusercontent.com/ManitnjG/BidSaarthi-AI/main/app/src/main/assets/tenders.json").build()).execute().use { r -> if(!r.isSuccessful) error("HTTP "+r.code); r.body?.string().orEmpty() } } catch(_:Exception) { context.assets.open("tenders.json").bufferedReader().use{it.readText()} }
   val a=JSONArray(raw)
   val grouped=mutableMapOf<String,MutableList<Tender>>()
-  for(i in 0 until a.length()){\n   try {\n   val o=a.getJSONObject(i); val sid=o.optString("source_id")
+  for(i in 0 until a.length()){
+   try {
+   val o=a.getJSONObject(i); val sid=o.optString("source_id")
    val source=TenderSources.all.firstOrNull{it.id==sid}?:continue
    grouped.getOrPut(sid){mutableListOf()}.add(Tender(
     id=o.optString("id"),title=o.optString("title"),department=o.optString("department",source.name),
@@ -25,7 +27,10 @@ class TenderRepository(private val context:Context) {
     deadline=o.optString("closes_at"),source=source.name,url=o.optString("source_url",source.baseUrl),readiness=0,
     summary=listOf(o.optString("reference_no"),"Official public listing").filter{it.isNotBlank()}.joinToString(" • "),
     requirements=listOf(Requirement("Verify original tender document",RequirementStatus.VERIFY))
-   ))\n   } catch(_:Exception) {}\n  }\n  TenderSources.all.map{s->
+   ))
+   } catch(_:Exception) {}
+  }
+  TenderSources.all.map{s->
    val items=grouped[s.id].orEmpty()
    SourceSync(s,items,if(items.isEmpty()) "No public listings collected in latest sync" else null)
   }
