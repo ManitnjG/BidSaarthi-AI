@@ -55,3 +55,11 @@ def test_cppp_closing_date_is_not_opening_date():
     html = '''<table><tr><td>1</td><td>20-Sep-2026 10:00 AM</td><td>26-Sep-2026 05:30 PM</td><td>27-Sep-2026 11:00 AM</td><td><a href="/cppp/tendersfullview/1">Solar installation/REF001/TENDER001</a></td><td>Central Department</td></tr></table>'''
     row = parse(SOURCES[0], html)[0]
     assert row.closes_at == '26-Sep-2026 05:30 PM'
+
+
+def test_cppp_slashes_preserved_in_reference():
+    html = '''<table><tr><th>Sl.No</th><th>e-Published Date</th><th>Bid Submission Closing Date</th><th>Tender Opening Date</th><th>Title/Ref.No./Tender Id</th><th>Organisation Name</th></tr><tr><td>1</td><td>20-Sep-2026 10:00 AM</td><td>26-Sep-2026 05:30 PM</td><td>27-Sep-2026 11:00 AM</td><td><a href="/cppp/tendersfullview/1">Solar installation</a>/EE/Kanpur/2026-27/169614</td><td>Public Works Department</td></tr></table>'''
+    row = parse(SOURCES[0], html)[0]
+    assert row.title == 'Solar installation'
+    assert row.reference_no == 'EE/Kanpur/2026-27'
+    assert row.department == 'Public Works Department'

@@ -22,6 +22,7 @@ def parse(source,html):
   ri=_idx(hdr,"reference no","tender ref","tender id","reference")
   ci=_idx(hdr,"closing date","bid submission end","close date","closing")
   oi=_idx(hdr,"opening date","bid opening","open date","opening")
+  di=_idx(hdr,"organisation name","organization name","department")
   for row in rows:
    cells=row.find_all("td",recursive=False)
    if len(cells)<3:continue
@@ -38,11 +39,18 @@ def parse(source,html):
    title=vals[ti] if ti is not None and ti<len(vals) else ""
    ref=vals[ri] if ri is not None and ri<len(vals) else ""
    if detail_cell is not None:
-    raw=clean(detail_cell.get_text(" ",strip=True));parts=[clean(x) for x in raw.rsplit("/",2)]
-    if len(parts)==3:
-     if not title:title=parts[0]
-     if not ref:ref=parts[1]
-    if not title:title=clean(detail_link.get_text(" ",strip=True)) if detail_link else raw
+    raw=clean(detail_cell.get_text(" ",strip=True))
+    anchor=clean(detail_link.get_text(" ",strip=True)) if detail_link else ""
+    suffix=raw[len(anchor):].lstrip(" /") if anchor and raw.startswith(anchor) else ""
+    if anchor and suffix and "/" in suffix:
+     title=anchor
+     ref=suffix.rsplit("/",1)[0].strip()
+    else:
+     parts=[clean(x) for x in raw.rsplit("/",2)]
+     if len(parts)==3:
+      if not title:title=parts[0]
+      if not ref:ref=parts[1]
+     if not title:title=anchor or raw
    if not title:
     candidates=[v for v in vals if len(v)>=8 and not DATE.search(v) and not re.fullmatch(r"\d+\.?",v)]
     title=candidates[-1] if candidates else ""
@@ -56,7 +64,7 @@ def parse(source,html):
    href=urljoin(source.url,detail_link.get("href")) if detail_link else source.url
    if href==source.url:continue
    evidence=" | ".join(vals)[:4000];digest=hashlib.sha256(f"{source.id}|{title}|{ref}|{closes}".encode()).hexdigest()
-   out.append(Tender(id=hashlib.sha256(f"{source.id}|{ref}".encode()).hexdigest()[:24],source_id=source.id,source_url=href,title=title[:500],department=source.name,reference_no=ref,location="Tamil Nadu" if source.id=="tn" else "India",closes_at=closes,opens_at=opens,content_hash=digest,evidence={"listing":evidence},confidence=.95))
+   out.append(Tender(id=hashlib.sha256(f"{source.id}|{ref}".encode()).hexdigest()[:24],source_id=source.id,source_url=href,title=title[:500],department=(vals[di] if di is not None and di<len(vals) else source.name),reference_no=ref,location="Tamil Nadu" if source.id=="tn" else "India",closes_at=closes,opens_at=opens,content_hash=digest,evidence={"listing":evidence},confidence=.95))
  return list({(x.source_id,x.reference_no or x.id):x for x in out}.values())[:100]
 ENDPOINTS={
  "state":["https://eprocure.gov.in/cppp/latestactivetendersnew/mmpdata"],

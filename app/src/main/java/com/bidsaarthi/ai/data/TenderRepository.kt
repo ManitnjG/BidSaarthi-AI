@@ -173,20 +173,13 @@ class TenderRepository(private val context: Context) {
                     continue
                 }
 
-                val lastSlash = rawTitle.lastIndexOf('/')
-                val tenderId = if (lastSlash != -1 && lastSlash < rawTitle.length - 1) {
-                    rawTitle.substring(lastSlash + 1).trim()
-                } else {
-                    "TND-" + java.security.MessageDigest.getInstance("SHA-256").digest((sourceNameForId(isState) + rawTitle).toByteArray()).take(12).joinToString("") { "%02x".format(it) }
-                }
-                val beforeId = if (lastSlash != -1) rawTitle.substring(0, lastSlash).trim() else rawTitle
-                val secondSlash = beforeId.lastIndexOf('/')
-                val refNo = if (secondSlash != -1 && secondSlash < beforeId.length - 1) {
-                    beforeId.substring(secondSlash + 1).trim()
-                } else {
-                    tenderId
-                }
-                val cleanTitle = if (secondSlash != -1) beforeId.substring(0, secondSlash).trim() else beforeId
+                val anchorTitle = linkEl?.text()?.trim().orEmpty()
+                val suffix = if(anchorTitle.isNotBlank() && rawTitle.startsWith(anchorTitle)) rawTitle.removePrefix(anchorTitle).trimStart(' ', '/') else ""
+                val refNo = if(suffix.contains('/')) suffix.substringBeforeLast('/').trim() else suffix.ifBlank { rawTitle }
+                val cleanTitle = anchorTitle.ifBlank { rawTitle }
+                val sourceId = if(isState) "state" else "cppp"
+                val tenderId = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest((sourceId + "|" + refNo).toByteArray()).take(12).joinToString("") { "%02x".format(it) }
 
                 val org = cols[5].text().trim()
                 val sourceName = if (isState) "State eProcurement (MMP)" else "CPPP / Central eProcurement"
@@ -214,8 +207,6 @@ class TenderRepository(private val context: Context) {
         }
         return results
     }
-
-    private fun sourceNameForId(isState: Boolean) = if(isState) "state:" else "cppp:"
 
     private fun extractLocation(authority: String, title: String): String {
         val text = "$authority $title".lowercase()
