@@ -4,7 +4,7 @@ from .engine import dedupe,match
 from .models import BusinessDNA,Tender
 from .llm import analyze
 from .sources import SOURCES
-from .store import init,upsert,list_tenders,get_tender
+from .store import init,upsert,list_tenders,get_tender,has_changes
 app=FastAPI(title="BidSaarthi Collector API",version="0.3.0");init()
 @app.get("/health")
 def health():return {"ok":True}
@@ -30,7 +30,7 @@ def alerts(limit:int=200):
  from datetime import datetime,timedelta
  out=[]
  for raw in list_tenders(limit=limit):
-  t=Tender(**raw);flags=[]
+  t=Tender(**raw);flags=[]\n  if has_changes(t.id):flags.append("CORRIGENDUM_OR_LISTING_CHANGED")
   if not t.document_urls:flags.append("DOCUMENTS_NOT_CAPTURED")
   if t.closes_at:
    for fmt in ("%d-%b-%Y %I:%M %p","%d-%b-%Y %H:%M"):
