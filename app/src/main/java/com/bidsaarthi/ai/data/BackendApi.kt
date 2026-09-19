@@ -2,6 +2,8 @@ package com.bidsaarthi.ai.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 class BackendApi(private val baseUrl:String,private val client:OkHttpClient=OkHttpClient()){
  suspend fun tendersJson(query:String=""):String=withContext(Dispatchers.IO){
   val url=baseUrl.trimEnd('/')+"/tenders?q="+java.net.URLEncoder.encode(query,"UTF-8")
