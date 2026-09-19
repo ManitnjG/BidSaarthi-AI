@@ -69,7 +69,20 @@ class MainActivity:ComponentActivity(){
  }}
 }
 
-@Composable fun TenderCard(t:Tender){val ctx=LocalContext.current;ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp)){AssistChip(onClick={},label={Text(t.source)});Text(t.title,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium);Text(t.department);Text("Closes: ${t.deadline}");Spacer(Modifier.height(6.dp));Text(t.summary);TextButton(onClick={ctx.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(t.url)))}){Text("Verify on official portal");Icon(Icons.Default.OpenInNew,null)}}}}
+@Composable fun TenderCard(t:Tender){val ctx=LocalContext.current;ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp)){AssistChip(onClick={},label={Text(t.source)});Text(t.title,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium);Text(t.department);Text("Closes: ${t.deadline}");Spacer(Modifier.height(6.dp));Text(t.summary)
+Spacer(Modifier.height(8.dp))
+Button(onClick={
+ val sourceHome=when {
+  t.source.contains("CPPP",true)->"https://eprocure.gov.in/eprocure/app"
+  t.source.contains("Tamil Nadu",true)->"https://tntenders.gov.in/nicgep/app"
+  t.source.contains("Maharashtra",true)->"https://mahatenders.gov.in/nicgep/app"
+  t.source.contains("Kerala",true)->"https://etenders.kerala.gov.in/nicgep/app"
+  else->t.url
+ }
+ ctx.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(sourceHome)))
+}){Text("Open official portal");Icon(Icons.Default.OpenInNew,null)}
+Text("Tender details are shown here in BidSaarthi. Official portal links open a fresh session because government detail URLs can expire.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+}}}
 @Composable fun Business(){val p=remember{BusinessProfile()};Column(Modifier.padding(20.dp)){Text("Business DNA",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold);Text("Set up once. BidSaarthi uses this profile to filter opportunities.");Spacer(Modifier.height(20.dp));ElevatedCard{Column(Modifier.padding(18.dp)){Text(p.name,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);Text("${p.state} • ${p.turnover}");Spacer(Modifier.height(12.dp));Text("Readiness ${p.readiness}%");LinearProgressIndicator(progress={p.readiness/100f},Modifier.fillMaxWidth());Spacer(Modifier.height(12.dp));Text("✓ GST   ✓ Udyam");Text("Categories: ${p.categories.joinToString()}")}}}}
 @Composable fun Workspace(){Column(Modifier.padding(20.dp)){Text("Bid Workspace",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold);Text("Eligibility → missing documents → preparation → submission");Spacer(Modifier.height(20.dp));listOf("Eligibility evidence","Missing documents","EMD & fees","Technical documents","Financial documents","Corrigendum watch").forEach{ListItem(headlineContent={Text(it)},leadingContent={Icon(Icons.Default.CheckCircle,null)})}}}
 @Composable fun Empty(title:String,body:String){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Default.BookmarkBorder,null,Modifier.size(48.dp));Text(title,style=MaterialTheme.typography.titleLarge);Text(body)}}}
