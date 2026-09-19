@@ -1,36 +1,34 @@
 package com.bidsaarthi.ai.data
 
+import android.content.Context
+import com.bidsaarthi.ai.model.Requirement
+import com.bidsaarthi.ai.model.RequirementStatus
 import com.bidsaarthi.ai.model.Tender
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.util.concurrent.TimeUnit
+import org.json.JSONArray
 
 data class SourceSync(val source:TenderSource,val tenders:List<Tender>,val error:String?=null)
 
-class TenderRepository {
- private val client=OkHttpClient.Builder().connectTimeout(12,TimeUnit.SECONDS).readTimeout(18,TimeUnit.SECONDS).build()
-
- suspend fun syncAll():List<SourceSync> = coroutineScope {
-  TenderSources.all.map { source -> async {
-   if(source.kind!=SourceKind.NIC_PUBLIC_HOME)
-    SourceSync(source,emptyList(),"Portal connected for direct access; structured feed not available.")
-   else runCatching {
-    val html=fetchPublicPage(source.baseUrl)
-    SourceSync(source,NicTenderParser.parse(source,html))
-   }.getOrElse { SourceSync(source,emptyList(),it.message?:"Sync failed") }
-  }}.awaitAll()
- }
-
- suspend fun fetchPublicPage(url:String):String=withContext(Dispatchers.IO){
-  val req=Request.Builder().url(url).header("User-Agent","Mozilla/5.0 (Android) BidSaarthiAI/0.2").build()
-  client.newCall(req).execute().use { r ->
-   if(!r.isSuccessful) error("HTTP ${r.code}")
-   r.body?.string().orEmpty()
+class TenderRepository(private val context:Context) {
+ suspend fun syncAll():List<SourceSync> = withContext(Dispatchers.IO) {
+  val raw=context.assets.open("tenders.json").bufferedReader().use{it.readText()}
+  val a=JSONArray(raw)
+  val grouped=mutableMapOf<String,MutableList<Tender>>()
+  for(i in 0 until a.length()){
+   val o=a.getJSONObject(i); val sid=o.optString("source_id")
+   val source=TenderSources.all.firstOrNull{it.id==sid}?:continue
+   grouped.getOrPut(sid){mutableListOf()}.add(Tender(
+    id=o.optString("id"),title=o.optString("title"),department=o.optString("department",source.name),
+    location=o.optString("location","India"),value=o.optString("value","Refer official tender document"),
+    deadline=o.optString("closes_at"),source=source.name,url=o.optString("source_url",source.baseUrl),readiness=0,
+    summary=listOf(o.optString("reference_no"),"Official public listing").filter{it.isNotBlank()}.joinToString(" • "),
+    requirements=listOf(Requirement("Verify original tender document",RequirementStatus.VERIFY))
+   ))
+  }
+  TenderSources.all.map{s->
+   val items=grouped[s.id].orEmpty()
+   SourceSync(s,items,if(items.isEmpty()) "No public listings collected in latest sync" else null)
   }
  }
 }
