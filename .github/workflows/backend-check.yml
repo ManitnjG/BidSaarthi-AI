@@ -13,3 +13,4 @@ jobs:
       - run: pip install -r backend/requirements.txt
       - run: python -m compileall backend/app
       - run: PYTHONPATH=backend python -c "from app.main import app; print(app.title)"
+      - run: PYTHONPATH=backend pytest -q backend/tests

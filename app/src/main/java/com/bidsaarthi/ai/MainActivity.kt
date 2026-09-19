@@ -3,191 +3,185 @@ package com.bidsaarthi.ai
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
 import com.bidsaarthi.ai.data.*
-import com.bidsaarthi.ai.model.*
+import com.bidsaarthi.ai.model.Tender
 import com.bidsaarthi.ai.ui.theme.BidSaarthiTheme
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import java.text.DateFormat
 
-class MainActivity:ComponentActivity(){
- override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);setContent{BidSaarthiApp()}}
+class MainActivity: ComponentActivity() {
+ override fun onCreate(savedInstanceState:Bundle?) { super.onCreate(savedInstanceState); setContent { BidSaarthiApp() } }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun BidSaarthiApp(){
- BidSaarthiTheme{
-  var tab by remember{mutableIntStateOf(0)}
-  val ctx=LocalContext.current
-  var savedIds by remember{mutableStateOf(loadSavedIds(ctx))}
-  val labels=listOf("Tenders","Saved","AI Workspace","Profile")
-  Scaffold(
-   topBar={CenterAlignedTopAppBar(title={Column(horizontalAlignment=Alignment.CenterHorizontally){Text("BidSaarthi AI",fontWeight=FontWeight.ExtraBold);Text("Tender Autopilot",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)}})},
-   bottomBar={NavigationBar{labels.forEachIndexed{i,s->NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Icon(listOf(Icons.Default.Radar,Icons.Default.Bookmark,Icons.Default.Checklist,Icons.Default.Business)[i],s)},label={Text(s)})}}}
-  ){p->Box(Modifier.padding(p)){when(tab){0->Radar(savedIds){id->savedIds=toggleSaved(ctx,savedIds,id)};1->SavedTenders(savedIds){id->savedIds=toggleSaved(ctx,savedIds,id)};2->Workspace();else->Business()}}}
+@Composable fun BidSaarthiApp() {
+ val ctx=LocalContext.current
+ val store=remember { LocalStore(ctx) }; val repo=remember { TenderRepository(ctx) }; val scope=rememberCoroutineScope()
+ var tab by remember { mutableIntStateOf(0) }
+ var syncs by remember { mutableStateOf(repo.loadLocal()) }
+ var saved by remember { mutableStateOf(store.savedIds()) }
+ var syncing by remember { mutableStateOf(false) }
+ var message by remember { mutableStateOf<String?>(null) }
+ var profile by remember { mutableStateOf(store.profile()) }
+ var selected by remember { mutableStateOf<Tender?>(null) }
+ fun sync() { if(syncing)return; scope.launch { syncing=true
+   try { syncs=repo.syncAll(); message=if(syncs.any { it.error != null && it.source.id in listOf("cppp","state") }) "Some sources could not refresh. Saved listings remain available." else "Refresh complete. Check each notice before bidding." }
+   catch(e:Exception) { message="Unable to refresh. Saved listings remain available." }
+   finally { syncing=false }
+ } }
+ LaunchedEffect(Unit) { sync() }
+ val all=(syncs.flatMap { it.tenders } + store.tenders().filter { it.id in saved }).associateBy { it.id }.values.toList()
+ BidSaarthiTheme {
+  Scaffold(topBar={TopAppBar(title={Column { Text("BidSaarthi",fontWeight=FontWeight.Bold); Text("Find opportunities. Prepare with evidence.",style=MaterialTheme.typography.labelSmall) }},actions={IconButton(onClick={sync()},enabled=!syncing){Icon(Icons.Default.Refresh,"Refresh tenders")}})},
+   bottomBar={NavigationBar { listOf("Discover","Saved","Workspace","Business").forEachIndexed { i,label -> NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Icon(listOf(Icons.Default.Search,Icons.Default.Bookmark,Icons.Default.Checklist,Icons.Default.Business)[i],label)},label={Text(label)}) } }
+  ) { padding -> Column(Modifier.padding(padding).fillMaxSize()) {
+   if(syncing) LinearProgressIndicator(Modifier.fillMaxWidth())
+   when(tab) {
+    0,1 -> TenderList(all, saved, tab==1, syncs, message, profile, {selected=it}, {t->store.toggle(t);saved=store.savedIds()})
+    2 -> Workspace(all.filter { it.id in saved },store) { selected=it }
+    else -> Business(profile) { profile=it;store.saveProfile(it) }
+   }
+  } }
+  selected?.let { t -> TenderDetails(t,profile,store,onDismiss={selected=null}) }
  }
 }
 
-@Composable fun Radar(savedIds:Set<String>,onToggleSaved:(String)->Unit){
- val ctx=LocalContext.current;val repo=remember{TenderRepository(ctx)};val scope=rememberCoroutineScope()
- var syncing by remember{mutableStateOf(false)};var syncs by remember{mutableStateOf(repo.loadLocal())};var query by remember{mutableStateOf("")};var filter by remember{mutableStateOf("All")}
- fun sync(){scope.launch{syncing=true;syncs=repo.syncAll();syncing=false}};LaunchedEffect(Unit){sync()}
- val all=syncs.flatMap{it.tenders}
-
- val stateCheck: (Tender) -> Boolean = { t ->
-  t.source.contains("State",true) || t.source.contains("MMP",true) || t.source.contains("Tamil",true) || t.source.contains("Kerala",true) || t.source.contains("Maharashtra",true) || t.source.contains("Karnataka",true) || listOf("Tamil","Kerala","Maharashtra","Karnataka","Delhi","Haryana","Rajasthan","Uttar").any{t.location.contains(it,true)}
- }
- val centralCheck: (Tender) -> Boolean = { t ->
-  t.source.contains("CPPP",true) || t.source.contains("Central",true) || t.source.contains("Railways",true)
- }
- val gemCheck: (Tender) -> Boolean = { t -> t.source.contains("GeM",true) }
-
- val stateCount = all.count(stateCheck)
- val centralCount = all.count(centralCheck)
- val gemCount = all.count(gemCheck)
- val cpppCount = centralCount
-
- val tenders=all.filter{t->
-  val matchesQuery = query.isBlank() || t.title.contains(query,true) || t.department.contains(query,true) || t.location.contains(query,true) || t.id.contains(query,true)
-  val matchesFilter = when(filter){
-   "Central" -> centralCheck(t)
-   "State" -> stateCheck(t)
-   "GeM" -> gemCheck(t)
-   "CPPP" -> centralCheck(t)
-   "Tamil Nadu" -> t.source.contains("Tamil",true) || t.location.contains("Tamil",true) || t.location.contains("Chennai",true)
-   "Kerala" -> t.source.contains("Kerala",true) || t.location.contains("Kerala",true) || t.location.contains("Kochi",true) || t.location.contains("Alappuzha",true)
-   "Maharashtra" -> t.source.contains("Maharashtra",true) || t.location.contains("Maharashtra",true) || t.location.contains("Mumbai",true) || t.location.contains("Pune",true)
-   "Karnataka" -> t.source.contains("Karnataka",true) || t.location.contains("Karnataka",true) || t.location.contains("Bengaluru",true)
-   else -> true
+@Composable fun TenderList(all:List<Tender>,saved:Set<String>,onlySaved:Boolean,syncs:List<SourceSync>,message:String?,profile:JSONObject,onOpen:(Tender)->Unit,onSave:(Tender)->Unit) {
+ var query by remember { mutableStateOf("") }; var source by remember { mutableStateOf("All") }
+ var activeOnly by remember { mutableStateOf(true) }; var soonest by remember { mutableStateOf(true) }
+ var showSources by remember { mutableStateOf(false) }
+ val now=System.currentTimeMillis()
+ val filtered=all.filter { t -> (!onlySaved || t.id in saved) && (source=="All" || t.source==source) &&
+  (query.isBlank() || "${t.title} ${t.department} ${t.location} ${t.summary}".contains(query,true)) &&
+  (!activeOnly || onlySaved || (deadlineMillis(t.deadline)?.let { it>=now } ?: true)) }
+ val rows=if(soonest) filtered.sortedBy { deadlineMillis(it.deadline) ?: Long.MAX_VALUE } else filtered.sortedBy { it.title }
+ LazyColumn(Modifier.fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(bottom=20.dp)) {
+  item { Spacer(Modifier.height(6.dp)); Text(if(onlySaved) "Your shortlist" else "Tender opportunities",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
+   Text("${rows.size} listings · Verify status on the official notice",style=MaterialTheme.typography.bodySmall)
   }
-  matchesQuery && matchesFilter
- }
- Column(Modifier.fillMaxSize().padding(horizontal=12.dp,vertical=4.dp)){
-  Row(verticalAlignment=Alignment.CenterVertically){
-   Column(Modifier.weight(1f)){
-    Text("Tender Radar",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.ExtraBold)
-    Text("${tenders.size} Live Indian Govt Tenders",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.SemiBold)
-   }
-   if(all.isNotEmpty())AssistChip(onClick={},label={Text("● Real Live (${all.size})",style=MaterialTheme.typography.labelSmall,color=Color(0xFF1B5E20),fontWeight=FontWeight.Bold)})
-   IconButton(onClick={sync()}){Icon(Icons.Default.Refresh,"Sync")}
-  }
-  OutlinedTextField(query,{query=it},Modifier.fillMaxWidth().heightIn(min=52.dp),singleLine=true,shape=MaterialTheme.shapes.medium,textStyle=MaterialTheme.typography.bodyMedium,placeholder={Text("Search tenders, departments, locations, IDs…",maxLines=1,overflow=TextOverflow.Ellipsis)},leadingIcon={Icon(Icons.Default.Search,null)})
-  Row(Modifier.padding(vertical=5.dp).horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)){
-   listOf(
-    "All" to "All (${all.size})",
-    "State" to "State ($stateCount)",
-    "Central" to "Central ($centralCount)",
-    "GeM" to "GeM ($gemCount)",
-    "CPPP" to "CPPP ($cpppCount)",
-    "Tamil Nadu" to "Tamil Nadu",
-    "Kerala" to "Kerala",
-    "Maharashtra" to "Maharashtra",
-    "Karnataka" to "Karnataka"
-   ).forEach{ (key, label) ->
-    FilterChip(selected=filter==key,onClick={filter=if(filter==key && key!="All") "All" else key},label={Text(label,style=MaterialTheme.typography.labelMedium)})
-   }
-  }
-  LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=8.dp)){
-   if(syncing)item{LinearProgressIndicator(Modifier.fillMaxWidth())}
-   items(tenders){TenderCard(it,it.id in savedIds,onToggleSaved)}
-  }
+  item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),singleLine=true,label={Text("Search work, department or location")},leadingIcon={Icon(Icons.Default.Search,null)}) }
+  item { Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+   (listOf("All")+all.map { it.source }.distinct()).forEach { label -> FilterChip(selected=source==label,onClick={source=label},label={Text(label)}) }
+  } }
+  item { Row(verticalAlignment=Alignment.CenterVertically) {
+   if(!onlySaved) { FilterChip(selected=activeOnly,onClick={activeOnly=!activeOnly},label={Text("Hide expired")}); Spacer(Modifier.width(8.dp)) }
+   FilterChip(selected=soonest,onClick={soonest=!soonest},label={Text(if(soonest) "Deadline order" else "Title order")})
+   Spacer(Modifier.weight(1f)); IconButton(onClick={showSources=!showSources}){Icon(Icons.Default.Info,"Source status")}
+  } }
+  if(message!=null) item { Text(message,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+  if(showSources) item { OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+   Text("Source freshness",fontWeight=FontWeight.Bold)
+   syncs.forEach { s -> Text(s.source.name+": "+if(s.source.id in listOf("gem","karnataka")) "Portal only — no feed" else (s.error ?: "Refreshed")+" · "+if(s.refreshedAt>0) DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(s.refreshedAt) else "Refresh time unknown",style=MaterialTheme.typography.bodySmall) }
+  } } }
+  if(rows.isEmpty()) item { OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(24.dp)) { Text(if(onlySaved) "No saved tenders yet" else "No matching listings",fontWeight=FontWeight.Bold);Text(if(onlySaved) "Save a tender to keep its details available offline." else "Try another search or source. Refresh to check for updates.") } } }
+  items(rows,key={it.id}) { t -> TenderCard(t,t.id in saved,profile,{onOpen(t)},{onSave(t)}) }
  }
 }
-@Composable fun TenderCard(t:Tender,saved:Boolean,onToggleSaved:(String)->Unit){
- val ctx=LocalContext.current;var expanded by remember{mutableStateOf(false)}
- val score=remember(t.id,t.title){75+(kotlin.math.abs((t.id+t.title).hashCode())%21)}
- val shortSource = when{
-  t.source.contains("Tamil",true) -> "Tamil Nadu"
-  t.source.contains("Kerala",true) -> "Kerala"
-  t.source.contains("Maharashtra",true) -> "Maharashtra"
-  t.source.contains("Karnataka",true) -> "Karnataka"
-  t.source.contains("GeM",true) -> "GeM"
-  t.source.contains("CPPP",true) -> "CPPP Central"
-  else -> t.source.take(14)
- }
- ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(12.dp)){
-  Row(verticalAlignment=Alignment.CenterVertically){
-   AssistChip(onClick={},label={Text(shortSource,style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Bold)})
-   Spacer(Modifier.width(6.dp))
-   Text(t.source,Modifier.weight(1f),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
-   Card(colors=CardDefaults.cardColors(containerColor=Color(0xFFE8F5E9))){
-    Row(Modifier.padding(horizontal=8.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically){
-     Text("★ ",style=MaterialTheme.typography.labelSmall,color=Color(0xFF2E7D32))
-     Text("$score%",fontWeight=FontWeight.ExtraBold,color=Color(0xFF1B5E20),style=MaterialTheme.typography.labelSmall)
-     Spacer(Modifier.width(3.dp))
-     Text("Good",style=MaterialTheme.typography.labelSmall,color=Color(0xFF2E7D32))
+
+@Composable fun TenderCard(t:Tender,saved:Boolean,profile:JSONObject,onOpen:()->Unit,onSave:()->Unit) {
+ val due=deadlineMillis(t.deadline);val remaining=due?.minus(System.currentTimeMillis())
+ val keywords=profile.optJSONArray("categories") ?: JSONArray()
+ val matches=(0 until keywords.length()).map { keywords.optString(it) }.filter { it.isNotBlank() && "${t.title} ${t.department}".contains(it,true) }
+ ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+  Text(t.source,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary)
+  Text(t.title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+  Text(t.department,style=MaterialTheme.typography.bodySmall)
+  Text(t.location+" · "+t.value,style=MaterialTheme.typography.bodySmall)
+  Text(when { remaining==null -> "Deadline: ${t.deadline} — verify";remaining<0 -> "Deadline passed · ${t.deadline}";remaining<=172800000L -> "Due within 48 hours · ${t.deadline}";else -> "Due ${t.deadline}" },style=MaterialTheme.typography.labelMedium,color=if(remaining!=null && remaining<172800000L) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+  if(matches.isNotEmpty()) Text("Keyword match: ${matches.joinToString()} · eligibility not assessed",style=MaterialTheme.typography.labelSmall)
+  Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+   FilledTonalButton(onClick=onOpen,modifier=Modifier.weight(1f)){Text("Details & analysis")}
+   IconToggleButton(checked=saved,onCheckedChange={onSave()}){Icon(if(saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,if(saved) "Remove saved tender" else "Save tender")}
+  }
+ } }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable fun TenderDetails(t:Tender,profile:JSONObject,store:LocalStore,onDismiss:()->Unit) {
+ val ctx=LocalContext.current;val scope=rememberCoroutineScope()
+ var result by remember(t.id) { mutableStateOf<JSONObject?>(null) };var loading by remember { mutableStateOf(false) };var error by remember { mutableStateOf<String?>(null) }
+ ModalBottomSheet(onDismissRequest=onDismiss) {
+  LazyColumn(Modifier.fillMaxWidth().padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=36.dp)) {
+   item { Text(t.title,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);Text(t.department);Text("Deadline: ${t.deadline}") }
+   item { Text("Reference: ${t.summary}",style=MaterialTheme.typography.bodySmall)
+    Button(onClick={runCatching { val uri=Uri.parse(t.url);require(uri.scheme=="https" || uri.scheme=="http");ctx.startActivity(Intent(Intent.ACTION_VIEW,uri)) }.onFailure { error="Could not open the official link." }},modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.OpenInNew,null);Spacer(Modifier.width(8.dp));Text("Open official notice") }
+   }
+   item { HorizontalDivider();Text("Evidence-based analysis",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+    Text("Analysis uses available listing text. Full tender documents must be checked for eligibility, EMD, exemptions and amendments.",style=MaterialTheme.typography.bodySmall)
+    FilledTonalButton(enabled=!loading,onClick={scope.launch { loading=true;error=null
+     try { result=BackendApi(BuildConfig.BACKEND_URL).analyze(t,profile) }
+     catch(e:Exception) { error=e.message ?: "Analysis failed. Please retry." }
+     finally { loading=false }
+    }},modifier=Modifier.fillMaxWidth()){Text(if(loading) "Analyzing listing…" else "Analyze with my business profile")}
+    if(loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+    error?.let { Text(it,color=MaterialTheme.colorScheme.error) }
+   }
+   result?.let { r ->
+    item { Text(if(r.optDouble("confidence",0.0)==0.0) "Analysis unavailable" else "Eligibility: requires document verification",fontWeight=FontWeight.Bold)
+     Text(r.optString("summary")); }
+    for(key in listOf("eligibility_reasons","missing_documents","risks")) {
+     val a=r.optJSONArray(key) ?: JSONArray()
+     if(a.length()>0) item { Text(key.replace('_',' ').replaceFirstChar { it.uppercase() },fontWeight=FontWeight.Bold);for(i in 0 until a.length()) Text("• "+a.optString(i)) }
     }
+    val evidence=r.optJSONObject("evidence")
+    if(evidence!=null && evidence.length()>0) item { Text("Supporting excerpts",fontWeight=FontWeight.Bold);evidence.keys().forEach { key -> Text("${key.replace('_',' ')}: ${evidence.optString(key)}",style=MaterialTheme.typography.bodySmall) } }
    }
+   item { Text("Preparation checklist",fontWeight=FontWeight.Bold);PreparationChecklist(t.id,store) }
   }
-  Spacer(Modifier.height(4.dp))
-  Text(t.title,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium,maxLines=2,overflow=TextOverflow.Ellipsis)
-  Spacer(Modifier.height(3.dp))
-  Text(t.department,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
-  Spacer(Modifier.height(4.dp))
-  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-   Text("📍 "+t.location,style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.primary,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f,fill=false))
-   Spacer(Modifier.width(8.dp))
-   Text("Due: "+t.deadline,style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Medium,color=MaterialTheme.colorScheme.error)
-  }
-  Spacer(Modifier.height(2.dp))
-  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-   Text(if(t.summary.isNotBlank()) "# "+t.summary.substringBefore(" • ") else "# ${t.id}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.outline,maxLines=1)
-   Text(t.value,style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.ExtraBold,color=MaterialTheme.colorScheme.onSurface)
-  }
-  Spacer(Modifier.height(8.dp))
-  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
-   OutlinedButton(onClick={expanded=!expanded},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp)){Text(if(expanded)"Hide" else "Details",maxLines=1,style=MaterialTheme.typography.labelMedium)}
-   OutlinedButton(onClick={onToggleSaved(t.id)},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=4.dp,vertical=0.dp)){Icon(if(saved)Icons.Default.Bookmark else Icons.Default.BookmarkBorder,null,Modifier.size(16.dp));Spacer(Modifier.width(3.dp));Text(if(saved)"Saved" else "Save",maxLines=1,style=MaterialTheme.typography.labelMedium)}
-   Button(onClick={expanded=true},modifier=Modifier.weight(1.15f),contentPadding=PaddingValues(horizontal=5.dp,vertical=0.dp)){Icon(Icons.Default.AutoAwesome,null,Modifier.size(16.dp));Spacer(Modifier.width(3.dp));Text("AI Analysis",maxLines=1,style=MaterialTheme.typography.labelMedium)}
-  }
-  if(expanded){
-   Spacer(Modifier.height(8.dp))
-   Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primaryContainer.copy(alpha=0.4f))){
-    Column(Modifier.padding(12.dp)){
-     Row(verticalAlignment=Alignment.CenterVertically){
-      Icon(Icons.Default.AutoAwesome,null,tint=MaterialTheme.colorScheme.primary,modifier=Modifier.size(18.dp))
-      Spacer(Modifier.width(6.dp))
-      Text("AI Tender Intelligence",fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleSmall)
-     }
-     Spacer(Modifier.height(4.dp))
-     Text("$score% Opportunity Readiness: GST & MSME profile aligned. Estimated Value: ${t.value}.",style=MaterialTheme.typography.bodySmall)
-     Spacer(Modifier.height(4.dp))
-     Text("Key Action: Verify technical specifications, CA turnover certificate and EMD before deadline.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-     Spacer(Modifier.height(6.dp))
-     FilledTonalButton(onClick={val u=t.url;try{ctx.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(u)))}catch(_:Exception){}},modifier=Modifier.fillMaxWidth(),contentPadding=PaddingValues(vertical=0.dp)){
-      Text("Open Official Portal Notice",style=MaterialTheme.typography.labelMedium)
-      Spacer(Modifier.width(6.dp))
-      Icon(Icons.Default.OpenInNew,null,Modifier.size(16.dp))
-     }
-    }
-   }
-  }
- }}}
-fun loadSavedIds(ctx:Context):Set<String> = ctx.getSharedPreferences("bidsaarthi",Context.MODE_PRIVATE).getStringSet("saved_tenders",emptySet())?.toSet()?:emptySet()
-fun toggleSaved(ctx:Context,current:Set<String>,id:String):Set<String>{val next=current.toMutableSet();if(!next.add(id))next.remove(id);ctx.getSharedPreferences("bidsaarthi",Context.MODE_PRIVATE).edit().putStringSet("saved_tenders",next).apply();return next.toSet()}
-@Composable fun SavedTenders(savedIds:Set<String>,onToggleSaved:(String)->Unit){
- val ctx=LocalContext.current;val repo=remember{TenderRepository(ctx)};val scope=rememberCoroutineScope();var syncs by remember{mutableStateOf(repo.loadLocal())};var loading by remember{mutableStateOf(false)}
- LaunchedEffect(Unit){scope.launch{syncs=repo.syncAll();loading=false}}
- val saved=syncs.flatMap{it.tenders}.filter{it.id in savedIds}
- when{loading->Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){CircularProgressIndicator()};saved.isEmpty()->Empty("No saved tenders","Tap Save on a tender to keep it here.");else->Column(Modifier.fillMaxSize().padding(12.dp)){Text("Saved Tenders",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.ExtraBold);Text(saved.size.toString()+" saved opportunities",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Spacer(Modifier.height(8.dp));LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){items(saved){TenderCard(it,true,onToggleSaved)}}}}
+ }
 }
-@Composable fun Business(){var name by remember{mutableStateOf("My Business")};var state by remember{mutableStateOf("Tamil Nadu")};var turnover by remember{mutableStateOf("₹50L+")};var categories by remember{mutableStateOf("IT Services, Electrical")};Column(Modifier.padding(20.dp)){Text("My Business Profile",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold);Text("AI uses this profile to rank tenders and check eligibility.");Spacer(Modifier.height(16.dp));OutlinedTextField(name,{name=it},label={Text("Business name")},modifier=Modifier.fillMaxWidth());OutlinedTextField(state,{state=it},label={Text("State")},modifier=Modifier.fillMaxWidth());OutlinedTextField(turnover,{turnover=it},label={Text("Annual turnover")},modifier=Modifier.fillMaxWidth());OutlinedTextField(categories,{categories=it},label={Text("Categories / keywords")},modifier=Modifier.fillMaxWidth());Spacer(Modifier.height(12.dp));Text("Registrations",fontWeight=FontWeight.Bold);Text("✓ GST    ✓ Udyam/MSME");Spacer(Modifier.height(12.dp));Button(onClick={}){Icon(Icons.Default.Save,null);Text(" Save Profile")}}}
-@Composable fun Workspace(){Column(Modifier.padding(20.dp)){Text("Bid Workspace",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold);Text("Eligibility → missing documents → preparation → submission");Spacer(Modifier.height(20.dp));listOf("Eligibility evidence","Missing documents","EMD & fees","Technical documents","Financial documents","Corrigendum watch").forEach{ListItem(headlineContent={Text(it)},leadingContent={Icon(Icons.Default.CheckCircle,null)})}}}
-@Composable fun Empty(title:String,body:String){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Default.BookmarkBorder,null,Modifier.size(48.dp));Text(title,style=MaterialTheme.typography.titleLarge);Text(body)}}}
+
+@Composable fun PreparationChecklist(id:String,store:LocalStore) {
+ var checked by remember(id) { mutableStateOf(store.checklist(id)) }
+ listOf("Read official tender and amendments","Verify eligibility and exemptions","Confirm EMD, fees and deadline","Prepare technical documents","Review financial bid").forEach { label ->
+  Row(verticalAlignment=Alignment.CenterVertically) { Checkbox(checked=label in checked,onCheckedChange={yes->checked=if(yes) checked+label else checked-label;store.setChecklist(id,checked)});Text(label,style=MaterialTheme.typography.bodyMedium) }
+ }
+}
+@Composable fun Workspace(tenders:List<Tender>,store:LocalStore,onOpen:(Tender)->Unit) {
+ LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+  item { Text("Bid workspace",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold);Text("Your saved opportunities and preparation progress.") }
+  if(tenders.isEmpty()) item { Text("Save a tender from Discover to start preparing.") }
+  items(tenders,key={it.id}) { t -> OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(t.title,fontWeight=FontWeight.Bold);PreparationChecklist(t.id,store);TextButton(onClick={onOpen(t)}){Text("Review notice & analysis")} } } }
+ }
+}
+@Composable fun Business(initial:JSONObject,onSave:(JSONObject)->Unit) {
+ var name by remember { mutableStateOf(initial.optString("name")) };var state by remember { mutableStateOf(initial.optJSONArray("states")?.optString(0).orEmpty()) }
+ var turnover by remember { mutableStateOf(if(initial.isNull("turnover")) "" else initial.optString("turnover")) }
+ var categories by remember { mutableStateOf(initial.optJSONArray("categories")?.let { a->(0 until a.length()).joinToString(", "){a.optString(it)} }.orEmpty()) }
+ var gst by remember { mutableStateOf(initial.optBoolean("has_gst",false)) };var udyam by remember { mutableStateOf(initial.optBoolean("has_udyam",false)) }
+ var message by remember { mutableStateOf("") }
+ LazyColumn(Modifier.fillMaxSize().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+  item { Text("Your business",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold);Text("Enter accurate details for tender relevance and analysis.") }
+  item { OutlinedTextField(name,{name=it;message=""},Modifier.fillMaxWidth(),label={Text("Business name")},singleLine=true) }
+  item { OutlinedTextField(state,{state=it;message=""},Modifier.fillMaxWidth(),label={Text("State")},singleLine=true) }
+  item { OutlinedTextField(turnover,{turnover=it;message=""},Modifier.fillMaxWidth(),label={Text("Annual turnover in rupees (optional)")},supportingText={Text("Example: 5000000 for ₹50 lakh")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
+  item { OutlinedTextField(categories,{categories=it;message=""},Modifier.fillMaxWidth(),label={Text("Work keywords, separated by commas")},supportingText={Text("Example: electrical, solar, housekeeping")}) }
+  item { Row(verticalAlignment=Alignment.CenterVertically){Checkbox(gst,{gst=it;message=""});Text("GST registered")};Row(verticalAlignment=Alignment.CenterVertically){Checkbox(udyam,{udyam=it;message=""});Text("Udyam / MSME registered")} }
+  item { Button(onClick={
+   val amount=turnover.replace(",", "").trim().toDoubleOrNull()
+   if(turnover.isNotBlank() && (amount==null || !amount.isFinite() || amount<0)) message="Enter a valid turnover amount in rupees."
+   else { onSave(JSONObject().put("name",name.trim()).put("states",JSONArray(listOf(state.trim()).filter { it.isNotBlank() })).put("turnover",amount ?: JSONObject.NULL).put("categories",JSONArray(categories.split(',').map { it.trim() }.filter { it.isNotBlank() })).put("has_gst",gst).put("has_udyam",udyam));message="Profile saved on this device." }
+  },modifier=Modifier.fillMaxWidth()){Text("Save business profile")};Text(message,style=MaterialTheme.typography.bodySmall)
+  Text("When you request analysis, your profile and the listing are sent to the configured analysis service. No API key is stored in the app.",style=MaterialTheme.typography.bodySmall) }
+ }
+}

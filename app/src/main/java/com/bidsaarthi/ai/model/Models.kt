@@ -8,7 +8,7 @@ data class Tender(
 data class Requirement(val name:String,val status:RequirementStatus,val evidence:String="")
 enum class RequirementStatus { READY, MISSING, VERIFY }
 data class BusinessProfile(
-    val name:String="Your Business", val categories:List<String> = listOf("IT Services","Electrical"),
-    val state:String="Tamil Nadu", val hasGst:Boolean=true, val hasUdyam:Boolean=true,
-    val turnover:String="₹50L+", val readiness:Int=82
+    val name:String="Your Business", val categories:List<String> = emptyList(),
+    val state:String="Tamil Nadu", val hasGst:Boolean=false, val hasUdyam:Boolean=false,
+    val turnover:String="", val readiness:Int=0
 )

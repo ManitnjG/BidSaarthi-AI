@@ -1,10 +1,25 @@
 # BidSaarthi AI
-Android-first Tender Autopilot for Indian MSMEs.
 
-## Product direction
-Business DNA → Opportunity Radar → evidence-backed eligibility → missing-document radar → Bid Readiness Passport → bid workspace → deadline/corrigendum monitoring.
+Native Android tender discovery and bid preparation app, with a FastAPI analysis backend.
 
-This repository intentionally does not bypass CAPTCHA, authentication, anti-bot controls, or fabricate live tender data. Official/permitted procurement connectors are added independently so one source outage does not break the app.
+## Version 0.4
+- Search and filter official listings; sort by deadline and hide expired notices.
+- Persistent business profiles, saved tender details, and preparation checklists.
+- Source freshness and refresh failures shown explicitly. Bundled listings are not described as live.
+- Listing analysis calls the backend; no generated match percentages or assumed registrations.
+- Eligibility remains unknown until full tender documents are verified.
 
 ## Build
-GitHub Actions builds a debug APK on every push to main.
+GitHub Actions builds a debug APK on pushes to main and publishes a GitHub release. Backend tests run separately. These are debug builds, not signed production Play Store releases.
+
+## Backend
+Install `backend/requirements.txt`, then run `uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000`.
+Set `OPENAI_API_KEY` and `BIDSAARTHI_LLM_MODEL` to an available Responses API model, or configure `BIDSAARTHI_LLM_URL` and `BIDSAARTHI_LLM_KEY` for a compatible service. The Android app contains no provider key.
+Deploy this backend revision before using the new `/analyze-listing` endpoint. Without a configured provider, the app reports that analysis is unavailable.
+The optional `/collect` administrative endpoint requires `BIDSAARTHI_COLLECTOR_TOKEN` via `X-Collector-Token`. Scheduled GitHub collection works directly and does not require this token.
+
+## Limits
+Analysis currently reads listing text, not complete tender PDFs. GeM and Karnataka are portal links, not live feeds. Request limits and analysis caches are per process; a scaled public deployment needs shared rate limiting and authenticated quotas. Store backend SQLite data on persistent storage. Verify tender links, amendments and deadlines on the official portal before submitting a bid.
+
+## Tests
+`PYTHONPATH=backend pytest -q backend/tests`

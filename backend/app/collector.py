@@ -56,7 +56,7 @@ def parse(source,html):
    href=urljoin(source.url,detail_link.get("href")) if detail_link else source.url
    if href==source.url:continue
    evidence=" | ".join(vals)[:4000];digest=hashlib.sha256(f"{source.id}|{title}|{ref}|{closes}".encode()).hexdigest()
-   out.append(Tender(id=digest[:24],source_id=source.id,source_url=href,title=title[:500],department=source.name,reference_no=ref,location="Tamil Nadu" if source.id=="tn" else "India",closes_at=closes,opens_at=opens,content_hash=digest,evidence={"listing":evidence},confidence=.95))
+   out.append(Tender(id=hashlib.sha256(f"{source.id}|{ref}".encode()).hexdigest()[:24],source_id=source.id,source_url=href,title=title[:500],department=source.name,reference_no=ref,location="Tamil Nadu" if source.id=="tn" else "India",closes_at=closes,opens_at=opens,content_hash=digest,evidence={"listing":evidence},confidence=.95))
  return list({(x.source_id,x.reference_no or x.id):x for x in out}.values())[:100]
 ENDPOINTS={
  "cppp":["https://eprocure.gov.in/eprocure/app?component=view&page=Home&service=direct","https://eprocure.gov.in/epublish/app?page=FrontEndLatestActiveTenders&service=page"],

@@ -15,7 +15,8 @@ import java.util.concurrent.TimeUnit
 data class SourceSync(
     val source: TenderSource,
     val tenders: List<Tender>,
-    val error: String? = null
+    val error: String? = null,
+    val refreshedAt: Long = 0
 )
 
 class TenderRepository(private val context: Context) {
@@ -68,8 +69,14 @@ class TenderRepository(private val context: Context) {
         } catch (_: Exception) {
         }
 
+        val cached = LocalStore(context).tenders()
+        for (t in cached) {
+            val source = TenderSources.all.firstOrNull { it.name == t.source } ?: continue
+            val bucket = grouped.getOrPut(source.id) { mutableListOf() }
+            bucket.removeAll { it.id == t.id }; bucket.add(t)
+        }
         return TenderSources.all.map { source ->
-            SourceSync(source, grouped[source.id].orEmpty(), null)
+            SourceSync(source, grouped[source.id].orEmpty(), "Saved data — refresh to verify", LocalStore(context).refreshed(source.id))
         }
     }
 
@@ -77,6 +84,8 @@ class TenderRepository(private val context: Context) {
         val localSyncs = loadLocal()
         val grouped = mutableMapOf<String, MutableList<Tender>>()
         val seenIds = mutableSetOf<String>()
+        val errors = mutableMapOf<String, String>()
+        val store = LocalStore(context)
 
         for (sync in localSyncs) {
             for (t in sync.tenders) {
@@ -95,21 +104,25 @@ class TenderRepository(private val context: Context) {
         for ((sourceId, url, isState) in liveSources) {
             try {
                 val liveTenders = fetchLivePortals(url, isState)
-                for (t in liveTenders) {
-                    if (t.id.isNotBlank() && seenIds.add(t.id)) {
-                        grouped.getOrPut(sourceId) { mutableListOf() }.add(0, t)
-                    }
+                if (liveTenders.isEmpty()) errors[sourceId] = "No listings returned; showing saved data"
+                else {
+                    val bucket = grouped.getOrPut(sourceId) { mutableListOf() }
+                    liveTenders.forEach { t -> bucket.removeAll { it.id == t.id }; bucket.add(0, t) }
+                    store.setRefreshed(sourceId)
                 }
             } catch (_: Exception) {
+                errors[sourceId] = "Refresh failed; showing saved data"
             }
         }
 
+        store.saveTenders(grouped.values.flatten())
         TenderSources.all.map { source ->
             val items = grouped[source.id].orEmpty()
             SourceSync(
                 source,
                 items,
-                if (items.isEmpty()) "No public listings collected in latest sync" else null
+                errors[source.id] ?: if (source.id !in listOf("cppp", "state")) "Bundled/saved listings; not refreshed on device" else null,
+                store.refreshed(source.id)
             )
         }
     }
@@ -121,9 +134,9 @@ class TenderRepository(private val context: Context) {
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .build()
-        val response = client.newCall(request).execute()
-        if (!response.isSuccessful) return emptyList()
-        val html = response.body?.string() ?: return emptyList()
+        val html = client.newCall(request).execute().use { response ->
+            check(response.isSuccessful) { "HTTP ${response.code}" }; response.body?.string().orEmpty()
+        }
         val doc = Jsoup.parse(html, url)
         val rows = doc.select("table#table.list_table tr, table.list_table tr, table tr")
 
@@ -146,7 +159,7 @@ class TenderRepository(private val context: Context) {
                 val tenderId = if (lastSlash != -1 && lastSlash < rawTitle.length - 1) {
                     rawTitle.substring(lastSlash + 1).trim()
                 } else {
-                    "TND-${System.currentTimeMillis() % 100000}"
+                    "TND-" + java.security.MessageDigest.getInstance("SHA-256").digest((sourceNameForId(isState) + rawTitle).toByteArray()).take(12).joinToString("") { "%02x".format(it) }
                 }
                 val beforeId = if (lastSlash != -1) rawTitle.substring(0, lastSlash).trim() else rawTitle
                 val secondSlash = beforeId.lastIndexOf('/')
@@ -182,6 +195,8 @@ class TenderRepository(private val context: Context) {
         }
         return results
     }
+
+    private fun sourceNameForId(isState: Boolean) = if(isState) "state:" else "cppp:"
 
     private fun extractLocation(authority: String, title: String): String {
         val text = "$authority $title".lowercase()

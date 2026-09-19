@@ -1,4 +1,7 @@
-from fastapi import FastAPI,HTTPException
+from fastapi import FastAPI,HTTPException,Request,Header
+import os
+import secrets
+from .analysis_service import ListingRequest,analyze_listing
 from .collector import collect_all
 from .engine import dedupe,match
 from .models import BusinessDNA,Tender
@@ -11,7 +14,10 @@ def health():return {"ok":True}
 @app.get("/sources")
 def sources():return [{"id":s.id,"name":s.name,"url":s.url,"mode":s.mode} for s in SOURCES]
 @app.post("/collect")
-async def collect():
+async def collect(x_collector_token: str | None = Header(default=None)):
+ expected=os.getenv("BIDSAARTHI_COLLECTOR_TOKEN", "")
+ if not expected or not secrets.compare_digest(x_collector_token or "",expected):
+  raise HTTPException(403,"Collection requires the server collector token")
  results=await collect_all();items=dedupe([t for r in results for t in r["items"]]);upsert(items)
  return {"sources":[{"source":r["source"],"status":r["status"],"count":len(r["items"]),"error":r.get("error")} for r in results],"stored":len(items)}
 @app.get("/tenders")
@@ -20,10 +26,10 @@ def tenders(q:str="",limit:int=100):return list_tenders(q,min(limit,200))
 def matches(b:BusinessDNA,limit:int=100):return sorted([match(Tender(**x),b) for x in list_tenders(limit=limit)],key=lambda x:x.score,reverse=True)
 
 @app.post("/analyze/{tender_id}")
-async def analysis(tender_id:str,business:BusinessDNA|None=None):
+async def analysis(tender_id:str,request:Request,business:BusinessDNA|None=None):
  raw=get_tender(tender_id)
  if not raw:raise HTTPException(404,"Tender not found")
- return await analyze(Tender(**raw),business)
+ return await analyze_listing(ListingRequest(tender=Tender(**raw),business=business or BusinessDNA()),request)
 
 @app.post("/alerts")
 def alerts(limit:int=200):
@@ -42,3 +48,7 @@ def alerts(limit:int=200):
     except ValueError:pass
   if flags:out.append({"tender_id":t.id,"title":t.title,"alerts":flags,"evidence":t.evidence})
  return out
+
+@app.post("/analyze-listing")
+async def listing_analysis(payload:ListingRequest,request:Request):
+ return await analyze_listing(payload,request)
