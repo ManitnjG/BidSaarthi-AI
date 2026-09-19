@@ -6,12 +6,12 @@ plugins {
 android {
     namespace = "com.bidsaarthi.ai"
     compileSdk = 35
-    defaultConfig {
+    defaultConfig {\n        val backendUrl = (project.findProperty("BIDSAARTHI_BACKEND_URL") as String?) ?: System.getenv("BIDSAARTHI_BACKEND_URL") ?: ""\n        buildConfigField("String", "BACKEND_URL", "\\\"${backendUrl.replace("\\", "\\\\").replace("\\"", "\\\\"")}\\\"")
         applicationId = "com.bidsaarthi.ai"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
