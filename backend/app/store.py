@@ -13,3 +13,9 @@ def list_tenders(q="",limit=100):
  with sqlite3.connect(DB) as c:
   rows=c.execute("select payload from tenders where title like ? order by updated_at desc limit ?",(f"%{q}%",limit)).fetchall()
  return [json.loads(r[0]) for r in rows]
+
+def get_tender(tender_id):
+ init()
+ with sqlite3.connect(DB) as c:
+  r=c.execute("select payload from tenders where id=?",(tender_id,)).fetchone()
+ return json.loads(r[0]) if r else None
