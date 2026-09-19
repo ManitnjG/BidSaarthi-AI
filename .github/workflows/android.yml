@@ -58,6 +58,11 @@ jobs:
           async def run():
               results = await collect_all()
               rows, status = [], []
+              try:
+                  with open("app/src/main/assets/tenders.json") as oldfh:
+                      previous = json.load(oldfh)
+              except Exception:
+                  previous = []
               for result in results:
                   status.append({
                       "source": result["source"],
@@ -65,7 +70,17 @@ jobs:
                       "count": len(result["items"]),
                       "error": result.get("error")
                   })
-                  rows.extend(x.model_dump() for x in result["items"])
+                  fresh = [x.model_dump() for x in result["items"]]
+                  if fresh:
+                      rows.extend(fresh)
+                  else:
+                      # Do not wipe a working source because a government portal is temporarily blocked/down.
+                      rows.extend(x for x in previous if x.get("source_id") == result["source"])
+              dedup = {}
+              for x in rows:
+                  key = (x.get("source_id",""), x.get("reference_no") or x.get("id",""))
+                  dedup[key] = x
+              rows = list(dedup.values())
               with open("app/src/main/assets/tenders.json", "w") as fh:
                   json.dump(rows, fh, ensure_ascii=False)
               with open("app/src/main/assets/source_status.json", "w") as fh:
