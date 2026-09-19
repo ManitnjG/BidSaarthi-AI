@@ -9,6 +9,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import org.jsoup.Jsoup
+import java.util.concurrent.TimeUnit
 
 data class SourceSync(
     val source: TenderSource,
@@ -17,50 +19,87 @@ data class SourceSync(
 )
 
 class TenderRepository(private val context: Context) {
-    private val client = OkHttpClient()
-    private val githubFeed = "https://raw.githubusercontent.com/ManitnjG/BidSaarthi-AI/main/app/src/main/assets/tenders.json"
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .build()
 
-    suspend fun syncAll(): List<SourceSync> = withContext(Dispatchers.IO) {
-        val raw = try {
-            client.newCall(Request.Builder().url(githubFeed).build()).execute().use { response ->
-                if (!response.isSuccessful) error("HTTP " + response.code)
-                response.body?.string().orEmpty()
-            }
-        } catch (_: Exception) {
-            context.assets.open("tenders.json").bufferedReader().use { it.readText() }
-        }
-
-        val array = JSONArray(raw)
+    fun loadLocal(): List<SourceSync> {
         val grouped = mutableMapOf<String, MutableList<Tender>>()
-
-        for (i in 0 until array.length()) {
-            try {
+        try {
+            val raw = context.assets.open("tenders.json").bufferedReader().use { it.readText() }
+            val array = JSONArray(raw)
+            for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
-                val sourceId = obj.optString("source_id")
+                val id = obj.optString("id")
+                if (id.isBlank()) continue
+
+                var sourceId = obj.optString("source_id", "cppp")
                 val exactUrl = obj.optString("source_url")
                 val refNo = obj.optString("reference_no")
                 val title = obj.optString("title")
-                val source = TenderSources.all.firstOrNull { it.id == sourceId } ?: continue
-                if (title.isBlank() || refNo.isBlank() || exactUrl.isBlank() || exactUrl == source.baseUrl) continue
-                grouped.getOrPut(sourceId) { mutableListOf() }.add(
+                val dept = obj.optString("department")
+
+                if (sourceId.isBlank()) sourceId = if (dept.contains("State", true)) "state" else "cppp"
+                val source = TenderSources.all.firstOrNull { it.id == sourceId } ?: TenderSources.all.first()
+
+                val loc = obj.optString("location").ifBlank { "Pan India / Central" }
+                val valueStr = if (obj.isNull("value")) "Refer official NIT / BOQ" else obj.optString("value", "Refer official NIT / BOQ")
+                val deadline = obj.optString("closes_at", "Refer portal")
+
+                grouped.getOrPut(source.id) { mutableListOf() }.add(
                     Tender(
-                        id = obj.optString("id"),
+                        id = id,
                         title = title,
-                        department = obj.optString("department", source.name),
-                        location = obj.optString("location", "India"),
-                        value = if (obj.isNull("value")) "Refer official tender document" else obj.optString("value", "Refer official tender document"),
-                        deadline = obj.optString("closes_at"),
+                        department = dept.ifBlank { source.name },
+                        location = loc,
+                        value = valueStr,
+                        deadline = deadline,
                         source = source.name,
-                        url = exactUrl,
+                        url = exactUrl.ifBlank { source.baseUrl },
                         readiness = 0,
-                        summary = listOf(refNo, "Official public listing")
-                            .filter { it.isNotBlank() }
-                            .joinToString(" • "),
+                        summary = listOf(refNo, "Official public listing").filter { it.isNotBlank() }.joinToString(" • "),
                         requirements = listOf(
                             Requirement("Verify original tender document", RequirementStatus.VERIFY)
                         )
                     )
                 )
+            }
+        } catch (_: Exception) {
+        }
+
+        return TenderSources.all.map { source ->
+            SourceSync(source, grouped[source.id].orEmpty(), null)
+        }
+    }
+
+    suspend fun syncAll(): List<SourceSync> = withContext(Dispatchers.IO) {
+        val localSyncs = loadLocal()
+        val grouped = mutableMapOf<String, MutableList<Tender>>()
+        val seenIds = mutableSetOf<String>()
+
+        for (sync in localSyncs) {
+            for (t in sync.tenders) {
+                if (t.id.isNotBlank() && seenIds.add(t.id)) {
+                    grouped.getOrPut(sync.source.id) { mutableListOf() }.add(t)
+                }
+            }
+        }
+
+        // Fetch live updates from CPPP and State portals
+        val liveSources = listOf(
+            Triple("cppp", "https://eprocure.gov.in/cppp/latestactivetendersnew/cpppdata", false),
+            Triple("state", "https://eprocure.gov.in/cppp/latestactivetendersnew/mmpdata", true)
+        )
+
+        for ((sourceId, url, isState) in liveSources) {
+            try {
+                val liveTenders = fetchLivePortals(url, isState)
+                for (t in liveTenders) {
+                    if (t.id.isNotBlank() && seenIds.add(t.id)) {
+                        grouped.getOrPut(sourceId) { mutableListOf() }.add(0, t)
+                    }
+                }
             } catch (_: Exception) {
             }
         }
@@ -74,4 +113,97 @@ class TenderRepository(private val context: Context) {
             )
         }
     }
+
+    private fun fetchLivePortals(url: String, isState: Boolean): List<Tender> {
+        val results = mutableListOf<Tender>()
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .build()
+        val response = client.newCall(request).execute()
+        if (!response.isSuccessful) return emptyList()
+        val html = response.body?.string() ?: return emptyList()
+        val doc = Jsoup.parse(html, url)
+        val rows = doc.select("table#table.list_table tr, table.list_table tr, table tr")
+
+        for (row in rows) {
+            val cols = row.select("td")
+            if (cols.size >= 6) {
+                val pubDate = cols[1].text().trim()
+                val closingDate = cols[2].text().trim()
+                val titleCell = cols[4]
+                val linkEl = titleCell.selectFirst("a")
+                val rawLink = linkEl?.attr("abs:href") ?: linkEl?.attr("href") ?: ""
+                val tenderLink = if (rawLink.startsWith("http")) rawLink else if (rawLink.isNotBlank()) "https://eprocure.gov.in$rawLink" else url
+
+                val rawTitle = titleCell.text().trim()
+                if (rawTitle.isBlank() || rawTitle.contains("Title/Ref.No./Tender Id", ignoreCase = true)) {
+                    continue
+                }
+
+                val lastSlash = rawTitle.lastIndexOf('/')
+                val tenderId = if (lastSlash != -1 && lastSlash < rawTitle.length - 1) {
+                    rawTitle.substring(lastSlash + 1).trim()
+                } else {
+                    "TND-${System.currentTimeMillis() % 100000}"
+                }
+                val beforeId = if (lastSlash != -1) rawTitle.substring(0, lastSlash).trim() else rawTitle
+                val secondSlash = beforeId.lastIndexOf('/')
+                val refNo = if (secondSlash != -1 && secondSlash < beforeId.length - 1) {
+                    beforeId.substring(secondSlash + 1).trim()
+                } else {
+                    tenderId
+                }
+                val cleanTitle = if (secondSlash != -1) beforeId.substring(0, secondSlash).trim() else beforeId
+
+                val org = cols[5].text().trim()
+                val sourceName = if (isState) "State eProcurement (MMP)" else "CPPP / Central eProcurement"
+                val location = if (isState) org else extractLocation(org, cleanTitle)
+
+                results.add(
+                    Tender(
+                        id = tenderId.ifBlank { "TND-${results.size + 1}" },
+                        title = cleanTitle.ifBlank { rawTitle },
+                        department = org.ifBlank { if (isState) "State Government" else "Central Government" },
+                        location = location,
+                        value = "Refer official NIT / BOQ",
+                        deadline = closingDate.ifBlank { pubDate },
+                        source = sourceName,
+                        url = tenderLink,
+                        readiness = 0,
+                        summary = "$refNo • Official public listing",
+                        requirements = listOf(
+                            Requirement("Verify original tender document", RequirementStatus.VERIFY)
+                        )
+                    )
+                )
+            }
+        }
+        return results
+    }
+
+    private fun extractLocation(authority: String, title: String): String {
+        val text = "$authority $title".lowercase()
+        return when {
+            text.contains("delhi") -> "Delhi"
+            text.contains("mumbai") || text.contains("maharashtra") || text.contains("pune") || text.contains("nagpur") -> "Maharashtra"
+            text.contains("lucknow") || text.contains("uttar pradesh") || text.contains("noida") -> "Uttar Pradesh"
+            text.contains("bengaluru") || text.contains("bangalore") || text.contains("karnataka") -> "Karnataka"
+            text.contains("chennai") || text.contains("tamil nadu") -> "Tamil Nadu"
+            text.contains("hyderabad") || text.contains("telangana") -> "Telangana"
+            text.contains("kolkata") || text.contains("bengal") -> "West Bengal"
+            text.contains("jaipur") || text.contains("rajasthan") -> "Rajasthan"
+            text.contains("ahmedabad") || text.contains("gujarat") -> "Gujarat"
+            text.contains("bhopal") || text.contains("madhya pradesh") -> "Madhya Pradesh"
+            text.contains("kerala") || text.contains("kochi") -> "Kerala"
+            text.contains("chandigarh") || text.contains("punjab") || text.contains("haryana") -> "Punjab / Haryana"
+            text.contains("jammu") || text.contains("kashmir") -> "Jammu & Kashmir"
+            text.contains("patna") || text.contains("bihar") -> "Bihar"
+            text.contains("odisha") || text.contains("bhubaneswar") -> "Odisha"
+            text.contains("assam") || text.contains("guwahati") -> "Assam"
+            else -> "Pan India / Central"
+        }
+    }
 }
+

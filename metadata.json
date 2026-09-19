@@ -1,0 +1,6 @@
+{
+  "name": "BidSaarthi AI",
+  "description": "AI-powered tender discovery, matching, and analysis for Indian government tenders",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

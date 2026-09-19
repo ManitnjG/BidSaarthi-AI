@@ -9,13 +9,26 @@ android {
     defaultConfig {
         val backendUrl = (project.findProperty("BIDSAARTHI_BACKEND_URL") as String?)
             ?: System.getenv("BIDSAARTHI_BACKEND_URL")
-            ?: ""
+            ?: "https://bidsaarthi-ai.onrender.com"
         buildConfigField("String", "BACKEND_URL", "\"" + backendUrl + "\"")
         applicationId = "com.bidsaarthi.ai"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
+    }
+    signingConfigs {
+        create("debugConfig") {
+            storeFile = file("${rootDir}/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debugConfig")
+        }
     }
     buildFeatures {
         compose = true
