@@ -30,7 +30,7 @@ class MainActivity:ComponentActivity(){
 @Composable fun BidSaarthiApp(){
  BidSaarthiTheme{
   var tab by remember{mutableIntStateOf(0)}
-  val labels=listOf("Radar","Saved","Workspace","Business")
+  val labels=listOf("Tenders","Saved","AI Workspace","Profile")
   Scaffold(
    topBar={CenterAlignedTopAppBar(title={Column(horizontalAlignment=Alignment.CenterHorizontally){Text("BidSaarthi AI",fontWeight=FontWeight.ExtraBold);Text("Tender Autopilot",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)}})},
    bottomBar={NavigationBar{labels.forEachIndexed{i,s->NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Icon(listOf(Icons.Default.Radar,Icons.Default.Bookmark,Icons.Default.Checklist,Icons.Default.Business)[i],s)},label={Text(s)})}}}
@@ -46,11 +46,11 @@ class MainActivity:ComponentActivity(){
  LaunchedEffect(Unit){sync()}
  val tenders=syncs.flatMap{it.tenders}.filter{query.isBlank()||it.title.contains(query,true)||it.department.contains(query,true)}
  Column(Modifier.fillMaxSize().padding(horizontal=16.dp,vertical=12.dp)){
-  Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Opportunity Radar",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold);Text("Official opportunities matched to your business",color=MaterialTheme.colorScheme.onSurfaceVariant)};IconButton(onClick={sync()}){Icon(Icons.Default.Refresh,"Sync")}}
+  Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Tender Radar",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold);Text("Live government tenders + AI matching",color=MaterialTheme.colorScheme.onSurfaceVariant)};IconButton(onClick={sync()}){Icon(Icons.Default.Refresh,"Sync")}}
   OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),singleLine=true,shape=MaterialTheme.shapes.large,placeholder={Text("Search tenders or departments")},leadingIcon={Icon(Icons.Default.Search,null)},trailingIcon={ if(query.isNotEmpty()) IconButton(onClick={query=""}){Icon(Icons.Default.Close,"Clear")} })
   Spacer(Modifier.height(12.dp))
   LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp)){
-   item{SourcePanel(syncs,syncing)}
+   item{ElevatedCard(Modifier.fillMaxWidth()){Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.AutoAwesome,null);Spacer(Modifier.width(10.dp));Column{Text("${tenders.size} tenders available",fontWeight=FontWeight.Bold);Text("Open any tender and tap AI Analysis")}}}}\n   item{SourcePanel(syncs,syncing)}
    if(tenders.isEmpty()&&!syncing) item{Text("No structured public listings received. Use source buttons below to verify directly; CAPTCHA-protected search is never bypassed.")}
    items(tenders){TenderCard(it)}
   }
@@ -85,6 +85,6 @@ Button(onClick={
 }){Text("Open official portal");Icon(Icons.Default.OpenInNew,null)}
 Text("Tender details are shown here in BidSaarthi. Official portal links open a fresh session because government detail URLs can expire.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
 }}}
-@Composable fun Business(){val p=remember{BusinessProfile()};Column(Modifier.padding(20.dp)){Text("Business DNA",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold);Text("Set up once. BidSaarthi uses this profile to filter opportunities.");Spacer(Modifier.height(20.dp));ElevatedCard{Column(Modifier.padding(18.dp)){Text(p.name,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);Text("${p.state} • ${p.turnover}");Spacer(Modifier.height(12.dp));Text("Readiness ${p.readiness}%");LinearProgressIndicator(progress={p.readiness/100f},Modifier.fillMaxWidth());Spacer(Modifier.height(12.dp));Text("✓ GST   ✓ Udyam");Text("Categories: ${p.categories.joinToString()}")}}}}
+@Composable fun Business(){var name by remember{mutableStateOf("My Business")};var state by remember{mutableStateOf("Tamil Nadu")};var turnover by remember{mutableStateOf("₹50L+")};var categories by remember{mutableStateOf("IT Services, Electrical")};Column(Modifier.padding(20.dp)){Text("My Business Profile",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold);Text("AI uses this profile to rank tenders and check eligibility.");Spacer(Modifier.height(16.dp));OutlinedTextField(name,{name=it},label={Text("Business name")},modifier=Modifier.fillMaxWidth());OutlinedTextField(state,{state=it},label={Text("State")},modifier=Modifier.fillMaxWidth());OutlinedTextField(turnover,{turnover=it},label={Text("Annual turnover")},modifier=Modifier.fillMaxWidth());OutlinedTextField(categories,{categories=it},label={Text("Categories / keywords")},modifier=Modifier.fillMaxWidth());Spacer(Modifier.height(12.dp));Text("Registrations",fontWeight=FontWeight.Bold);Text("✓ GST    ✓ Udyam/MSME");Spacer(Modifier.height(12.dp));Button(onClick={}){Icon(Icons.Default.Save,null);Text(" Save Profile")}}}
 @Composable fun Workspace(){Column(Modifier.padding(20.dp)){Text("Bid Workspace",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold);Text("Eligibility → missing documents → preparation → submission");Spacer(Modifier.height(20.dp));listOf("Eligibility evidence","Missing documents","EMD & fees","Technical documents","Financial documents","Corrigendum watch").forEach{ListItem(headlineContent={Text(it)},leadingContent={Icon(Icons.Default.CheckCircle,null)})}}}
 @Composable fun Empty(title:String,body:String){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Default.BookmarkBorder,null,Modifier.size(48.dp));Text(title,style=MaterialTheme.typography.titleLarge);Text(body)}}}
