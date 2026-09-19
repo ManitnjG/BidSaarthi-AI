@@ -50,7 +50,8 @@ class MainActivity:ComponentActivity(){
   OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),singleLine=true,shape=MaterialTheme.shapes.large,placeholder={Text("Search tenders or departments")},leadingIcon={Icon(Icons.Default.Search,null)},trailingIcon={ if(query.isNotEmpty()) IconButton(onClick={query=""}){Icon(Icons.Default.Close,"Clear")} })
   Spacer(Modifier.height(12.dp))
   LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp)){
-   item{ElevatedCard(Modifier.fillMaxWidth()){Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.AutoAwesome,null);Spacer(Modifier.width(10.dp));Column{Text("${tenders.size} tenders available",fontWeight=FontWeight.Bold);Text("Open any tender and tap AI Analysis")}}}}\n   item{SourcePanel(syncs,syncing)}
+   item{ElevatedCard(Modifier.fillMaxWidth()){Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.AutoAwesome,null);Spacer(Modifier.width(10.dp));Column{Text("${tenders.size} tenders available",fontWeight=FontWeight.Bold);Text("Open any tender and tap AI Analysis")}}}}
+   item{SourcePanel(syncs,syncing)}
    if(tenders.isEmpty()&&!syncing) item{Text("No structured public listings received. Use source buttons below to verify directly; CAPTCHA-protected search is never bypassed.")}
    items(tenders){TenderCard(it)}
   }
