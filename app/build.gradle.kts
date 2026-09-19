@@ -6,7 +6,10 @@ plugins {
 android {
     namespace = "com.bidsaarthi.ai"
     compileSdk = 35
-    defaultConfig {\n        val backendUrl = (project.findProperty("BIDSAARTHI_BACKEND_URL") as String?) ?: System.getenv("BIDSAARTHI_BACKEND_URL") ?: ""\n        buildConfigField("String", "BACKEND_URL", "\\\"${backendUrl.replace("\\", "\\\\").replace("\\"", "\\\\"")}\\\"")\n        applicationId = "com.bidsaarthi.ai"
+    defaultConfig {
+        val backendUrl = (project.findProperty("BIDSAARTHI_BACKEND_URL") as String?) ?: System.getenv("BIDSAARTHI_BACKEND_URL") ?: ""
+        buildConfigField("String", "BACKEND_URL", "\\\"${backendUrl.replace("\\", "\\\\").replace("\\"", "\\\\"")}\\\"")
+        applicationId = "com.bidsaarthi.ai"
         minSdk = 24
         targetSdk = 35
         versionCode = 2
