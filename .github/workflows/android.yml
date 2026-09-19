@@ -41,7 +41,11 @@ jobs:
           python-version: "3.12"
       - name: Install collector
         run: pip install -r backend/requirements.txt
+      - name: Run backend tests
+        run: PYTHONPATH=backend pytest -q backend/tests
       - name: Collect official public tender listings
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           python - <<'PY'
           import asyncio,json,sys
