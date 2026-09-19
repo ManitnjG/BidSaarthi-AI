@@ -13,16 +13,16 @@ def _idx(headers,*names):
 def parse(source,html):
  soup=BeautifulSoup(html,"html.parser");out=[]
  for table in soup.select("table"):
-  rows=table.select("tr");hdr=[]
+  rows=table.find_all("tr");hdr=[]
   for r in rows:
-   hs=r.select("th")
+   hs=r.find_all("th",recursive=False)
    if hs:hdr=[clean(x.get_text(" ",strip=True)).lower() for x in hs];break
   ti=_idx(hdr,"tender title","title of work","work description","tender description")
   ri=_idx(hdr,"reference no","tender ref","tender id","reference")
   ci=_idx(hdr,"closing date","bid submission end","close date","closing")
   oi=_idx(hdr,"opening date","bid opening","open date","opening")
   for row in rows:
-   cells=row.select("td")
+   cells=row.find_all("td",recursive=False)
    if len(cells)<3:continue
    vals=[clean(c.get_text(" ",strip=True)) for c in cells]
    dates=[m.group(0) for v in vals for m in DATE.finditer(v)]
