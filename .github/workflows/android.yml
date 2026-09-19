@@ -25,7 +25,7 @@ jobs:
       - name: Build APK
         env:
           BIDSAARTHI_BACKEND_URL: https://bidsaarthi-ai.onrender.com
-        run: |\n          rm -rf app/build build .gradle/configuration-cache\n          gradle --no-daemon --no-build-cache --refresh-dependencies clean :app:assembleDebug
+        run: gradle --no-daemon --no-build-cache clean :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: BidSaarthi-AI-debug
