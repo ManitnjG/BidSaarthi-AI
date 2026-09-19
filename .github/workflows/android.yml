@@ -20,7 +20,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Build APK\n        env:\n          BIDSAARTHI_BACKEND_URL: ${{ secrets.BIDSAARTHI_BACKEND_URL }}\n        run: gradle --no-daemon --no-build-cache clean :app:assembleDebug
+      - name: Build APK
+        env:
+          BIDSAARTHI_BACKEND_URL: ${{ secrets.BIDSAARTHI_BACKEND_URL }}
+        run: gradle --no-daemon --no-build-cache clean :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: BidSaarthi-AI-debug
@@ -43,8 +46,6 @@ jobs:
       - name: Run backend tests
         run: PYTHONPATH=backend pytest -q backend/tests
       - name: Collect official public tender listings
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           python - <<'PY'
           import asyncio,json,sys
