@@ -22,6 +22,7 @@ class MainActivity:ComponentActivity(){
  override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);setContent{BidSaarthiApp()}}
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable fun BidSaarthiApp(){
  MaterialTheme(colorScheme=lightColorScheme()){
   var tab by remember{mutableIntStateOf(0)}
