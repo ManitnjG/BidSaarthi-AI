@@ -12,6 +12,7 @@ def _idx(headers,*names):
  return None
 def parse(source,html):
  soup=BeautifulSoup(html,"html.parser");out=[]
+ nav_titles={"tenders by location","tenders by organisation","tenders by classification","active tenders","tenders in archive","tender status","downloads","announcements","recognitions","site compatibility"}
  for table in soup.select("table"):
   rows=table.find_all("tr");hdr=[]
   for r in rows:
@@ -45,13 +46,15 @@ def parse(source,html):
    if not title:
     candidates=[v for v in vals if len(v)>=8 and not DATE.search(v) and not re.fullmatch(r"\d+\.?",v)]
     title=candidates[-1] if candidates else ""
-   if len(title)<8:continue
+   if len(title)<8 or clean(title).lower().lstrip("0123456789. ") in nav_titles:continue
+   if not ref or len(ref)<3:continue
    closes=DATE.search(vals[ci]).group(0) if ci is not None and ci<len(vals) and DATE.search(vals[ci]) else dates[-1]
    opens=DATE.search(vals[oi]).group(0) if oi is not None and oi<len(vals) and DATE.search(vals[oi]) else None
    if not ref:
     candidates=[v for v in vals if v!=title and not DATE.search(v) and 4<=len(v)<=120 and not any(x in v.lower() for x in ("mis reports","tenders by","downloads","site compatibility"))]
     ref=candidates[-1] if candidates else ""
    href=urljoin(source.url,detail_link.get("href")) if detail_link else source.url
+   if href==source.url:continue
    evidence=" | ".join(vals)[:4000];digest=hashlib.sha256(f"{source.id}|{title}|{ref}|{closes}".encode()).hexdigest()
    out.append(Tender(id=digest[:24],source_id=source.id,source_url=href,title=title[:500],department=source.name,reference_no=ref,location="Tamil Nadu" if source.id=="tn" else "India",closes_at=closes,opens_at=opens,content_hash=digest,evidence={"listing":evidence},confidence=.95))
  return list({(x.source_id,x.reference_no or x.id):x for x in out}.values())[:100]
