@@ -1,5 +1,7 @@
 package com.bidsaarthi.ai
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,12 +14,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.bidsaarthi.ai.data.TenderRepository
+import com.bidsaarthi.ai.data.*
 import com.bidsaarthi.ai.model.*
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 class MainActivity:ComponentActivity(){
  override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);setContent{BidSaarthiApp()}}
 }
@@ -35,17 +38,37 @@ class MainActivity:ComponentActivity(){
 }
 
 @Composable fun Radar(){
- val jobs=remember{TenderRepository().starterTenders()}
+ val repo=remember{TenderRepository()}; val scope=rememberCoroutineScope()
+ var syncing by remember{mutableStateOf(false)}; var syncs by remember{mutableStateOf<List<SourceSync>>(emptyList())}
+ var query by remember{mutableStateOf("")}
+ fun sync(){scope.launch{syncing=true;syncs=repo.syncAll();syncing=false}}
+ LaunchedEffect(Unit){sync()}
+ val tenders=syncs.flatMap{it.tenders}.filter{query.isBlank()||it.title.contains(query,true)||it.department.contains(query,true)}
  Column(Modifier.fillMaxSize().padding(16.dp)){
-  Text("Opportunity Radar",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
-  Text("Relevant opportunities based on your Business DNA")
-  Spacer(Modifier.height(16.dp))
-  OutlinedTextField("",{},Modifier.fillMaxWidth(),placeholder={Text("Search tender, department or category")},leadingIcon={Icon(Icons.Default.Search,null)})
-  Spacer(Modifier.height(16.dp))
-  LazyColumn(verticalArrangement=Arrangement.spacedBy(12.dp)){items(jobs){TenderCard(it)}}
+  Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Opportunity Radar",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text("Live public tender sources")};IconButton(onClick={sync()}){Icon(Icons.Default.Refresh,"Sync")}}
+  OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),placeholder={Text("Search tender, department or category")},leadingIcon={Icon(Icons.Default.Search,null)})
+  Spacer(Modifier.height(12.dp))
+  LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp)){
+   item{SourcePanel(syncs,syncing)}
+   if(tenders.isEmpty()&&!syncing) item{Text("No structured public listings received. Use source buttons below to verify directly; CAPTCHA-protected search is never bypassed.")}
+   items(tenders){TenderCard(it)}
+  }
  }
 }
-@Composable fun TenderCard(t:Tender){ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp)){AssistChip(onClick={},label={Text(t.source)});Text(t.title,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleLarge);Text(t.department);Spacer(Modifier.height(8.dp));Text(t.summary);Spacer(Modifier.height(12.dp));LinearProgressIndicator(progress={t.readiness/100f},Modifier.fillMaxWidth());Text(if(t.readiness==0)"Source setup required" else "${t.readiness}% bid ready",fontWeight=FontWeight.SemiBold)}}}
-@Composable fun Business(){val p=remember{BusinessProfile()};Column(Modifier.padding(20.dp)){Text("Business DNA",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text("Set up once. BidSaarthi uses this profile to filter opportunities.");Spacer(Modifier.height(20.dp));ElevatedCard{Column(Modifier.padding(18.dp)){Text(p.name,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);Text("${p.state} • ${p.turnover}");Spacer(Modifier.height(12.dp));Text("Readiness ${p.readiness}%");LinearProgressIndicator(progress={p.readiness/100f},Modifier.fillMaxWidth());Spacer(Modifier.height(12.dp));Text("✓ GST   ✓ Udyam");Text("Categories: ${p.categories.joinToString()}")}};Spacer(Modifier.height(16.dp));Button({},Modifier.fillMaxWidth()){Icon(Icons.Default.UploadFile,null);Spacer(Modifier.width(8.dp));Text("Import business documents")}}}
+
+@Composable fun SourcePanel(syncs:List<SourceSync>,syncing:Boolean){
+ val ctx=LocalContext.current
+ ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp)){
+  Text(if(syncing)"Syncing official sources…" else "Tender Sources",fontWeight=FontWeight.Bold)
+  TenderSources.all.forEach { s ->
+   val st=syncs.firstOrNull{it.source.id==s.id}
+   ListItem(headlineContent={Text(s.name)},supportingContent={Text(when{syncing->"Checking…";st==null->"Waiting";st.tenders.isNotEmpty()->"${st.tenders.size} live public listings";else->st.error?:"Connected • no parsed listings"})},
+    trailingContent={IconButton(onClick={ctx.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(s.baseUrl)))}){Icon(Icons.Default.OpenInNew,"Official source")}})
+  }
+ }}
+}
+
+@Composable fun TenderCard(t:Tender){val ctx=LocalContext.current;ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp)){AssistChip(onClick={},label={Text(t.source)});Text(t.title,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium);Text(t.department);Text("Closes: ${t.deadline}");Spacer(Modifier.height(6.dp));Text(t.summary);TextButton(onClick={ctx.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(t.url)))}){Text("Verify on official portal");Icon(Icons.Default.OpenInNew,null)}}}}
+@Composable fun Business(){val p=remember{BusinessProfile()};Column(Modifier.padding(20.dp)){Text("Business DNA",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text("Set up once. BidSaarthi uses this profile to filter opportunities.");Spacer(Modifier.height(20.dp));ElevatedCard{Column(Modifier.padding(18.dp)){Text(p.name,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);Text("${p.state} • ${p.turnover}");Spacer(Modifier.height(12.dp));Text("Readiness ${p.readiness}%");LinearProgressIndicator(progress={p.readiness/100f},Modifier.fillMaxWidth());Spacer(Modifier.height(12.dp));Text("✓ GST   ✓ Udyam");Text("Categories: ${p.categories.joinToString()}")}}}}
 @Composable fun Workspace(){Column(Modifier.padding(20.dp)){Text("Bid Workspace",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text("Eligibility → missing documents → preparation → submission");Spacer(Modifier.height(20.dp));listOf("Eligibility evidence","Missing documents","EMD & fees","Technical documents","Financial documents","Corrigendum watch").forEach{ListItem(headlineContent={Text(it)},leadingContent={Icon(Icons.Default.CheckCircle,null)})}}}
 @Composable fun Empty(title:String,body:String){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Default.BookmarkBorder,null,Modifier.size(48.dp));Text(title,style=MaterialTheme.typography.titleLarge);Text(body)}}}
