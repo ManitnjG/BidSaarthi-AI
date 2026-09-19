@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.bidsaarthi.ai.data.TenderRepository
 import com.bidsaarthi.ai.model.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 class MainActivity:ComponentActivity(){
  override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);setContent{BidSaarthiApp()}}
 }
