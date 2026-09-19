@@ -25,10 +25,10 @@ class TenderRepository(private val context: Context) {
         .readTimeout(8, TimeUnit.SECONDS)
         .build()
 
-    fun loadLocal(): List<SourceSync> {
+    fun loadLocal(snapshot: String? = null): List<SourceSync> {
         val grouped = mutableMapOf<String, MutableList<Tender>>()
         try {
-            val raw = context.assets.open("tenders.json").bufferedReader().use { it.readText() }
+            val raw = snapshot ?: context.assets.open("tenders.json").bufferedReader().use { it.readText() }
             val array = JSONArray(raw)
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
@@ -59,6 +59,7 @@ class TenderRepository(private val context: Context) {
                         source = source.name,
                         url = exactUrl.ifBlank { source.baseUrl },
                         readiness = 0,
+                        evidence = obj.optJSONObject("evidence")?.optString("listing").orEmpty(),
                         summary = listOf(refNo, "Official public listing").filter { it.isNotBlank() }.joinToString(" • "),
                         requirements = listOf(
                             Requirement("Verify original tender document", RequirementStatus.VERIFY)
@@ -69,7 +70,7 @@ class TenderRepository(private val context: Context) {
         } catch (_: Exception) {
         }
 
-        val cached = LocalStore(context).tenders()
+        val cached = if(snapshot == null) LocalStore(context).tenders() else emptyList()
         for (t in cached) {
             val source = TenderSources.all.firstOrNull { it.name == t.source } ?: continue
             val bucket = grouped.getOrPut(source.id) { mutableListOf() }
@@ -93,6 +94,21 @@ class TenderRepository(private val context: Context) {
                     grouped.getOrPut(sync.source.id) { mutableListOf() }.add(t)
                 }
             }
+        }
+
+        // Download the independently refreshed collector snapshot, so installed APKs
+        // receive state-source updates without requiring another APK installation.
+        try {
+            val snapshot = client.newCall(Request.Builder().url("https://raw.githubusercontent.com/ManitnjG/BidSaarthi-AI/main/app/src/main/assets/tenders.json").build()).execute().use { r ->
+                check(r.isSuccessful); r.body?.string() ?: error("Empty snapshot")
+            }
+            require(JSONArray(snapshot).length() > 0)
+            for (sync in loadLocal(snapshot)) {
+                val bucket = grouped.getOrPut(sync.source.id) { mutableListOf() }
+                sync.tenders.forEach { t -> bucket.removeAll { it.id == t.id }; bucket.add(t) }
+            }
+        } catch (_: Exception) {
+            // Cached data is retained and never relabelled as a successful live refresh.
         }
 
         // Fetch live updates from CPPP and State portals
@@ -121,7 +137,7 @@ class TenderRepository(private val context: Context) {
             SourceSync(
                 source,
                 items,
-                errors[source.id] ?: if (source.id !in listOf("cppp", "state")) "Bundled/saved listings; not refreshed on device" else null,
+                errors[source.id] ?: if (source.id !in listOf("cppp", "state")) "Collector snapshot / saved data; verify freshness on portal" else null,
                 store.refreshed(source.id)
             )
         }
@@ -185,6 +201,7 @@ class TenderRepository(private val context: Context) {
                         source = sourceName,
                         url = tenderLink,
                         readiness = 0,
+                        evidence = row.text().take(4000),
                         summary = "$refNo • Official public listing",
                         requirements = listOf(
                             Requirement("Verify original tender document", RequirementStatus.VERIFY)

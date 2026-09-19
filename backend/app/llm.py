@@ -46,6 +46,8 @@ Evidence values must be short exact excerpts from SOURCE. SOURCE:\n"""+source
   # Discard extracted requirements without a verified source excerpt.
   for field in ("turnover_required", "experience_required", "gst_required", "udyam_required", "value", "emd", "fee"):
    if field not in ev: out[field] = None
+  for field in ("required_documents", "eligibility_notes", "risks"):
+   if field not in ev: out[field] = []
   return out
 
 def client():

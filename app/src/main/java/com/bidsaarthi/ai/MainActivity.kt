@@ -52,8 +52,27 @@ class MainActivity: ComponentActivity() {
  LaunchedEffect(Unit) { sync() }
  val all=(syncs.flatMap { it.tenders } + store.tenders().filter { it.id in saved }).associateBy { it.id }.values.toList()
  BidSaarthiTheme {
-  Scaffold(topBar={TopAppBar(title={Column { Text("BidSaarthi",fontWeight=FontWeight.Bold); Text("Find opportunities. Prepare with evidence.",style=MaterialTheme.typography.labelSmall) }},actions={IconButton(onClick={sync()},enabled=!syncing){Icon(Icons.Default.Refresh,"Refresh tenders")}})},
-   bottomBar={NavigationBar { listOf("Discover","Saved","Workspace","Business").forEachIndexed { i,label -> NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Icon(listOf(Icons.Default.Search,Icons.Default.Bookmark,Icons.Default.Checklist,Icons.Default.Business)[i],label)},label={Text(label)}) } }
+  Scaffold(
+   topBar = {
+    TopAppBar(
+     title = { Column {
+      Text("BidSaarthi", fontWeight=FontWeight.Bold)
+      Text("Find opportunities. Prepare with evidence.", style=MaterialTheme.typography.labelSmall)
+     } },
+     actions = { IconButton(onClick={sync()}, enabled=!syncing) { Icon(Icons.Default.Refresh,"Refresh tenders") } }
+    )
+   },
+   bottomBar = {
+    NavigationBar {
+     listOf("Discover","Saved","Workspace","Business").forEachIndexed { i,label ->
+      NavigationBarItem(
+       selected=tab==i, onClick={tab=i},
+       icon={Icon(listOf(Icons.Default.Search,Icons.Default.Bookmark,Icons.Default.Checklist,Icons.Default.Business)[i],label)},
+       label={Text(label)}
+      )
+     }
+    }
+   }
   ) { padding -> Column(Modifier.padding(padding).fillMaxSize()) {
    if(syncing) LinearProgressIndicator(Modifier.fillMaxWidth())
    when(tab) {

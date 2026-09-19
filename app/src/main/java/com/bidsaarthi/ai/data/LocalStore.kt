@@ -26,9 +26,9 @@ class LocalStore(context: Context) {
     }.getOrDefault(emptyList())
     fun encode(t: Tender) = JSONObject().put("id",t.id).put("title",t.title).put("department",t.department)
         .put("location",t.location).put("value",t.value).put("deadline",t.deadline).put("source",t.source)
-        .put("url",t.url).put("summary",t.summary)
+        .put("url",t.url).put("summary",t.summary).put("evidence",t.evidence)
     private fun decode(o: JSONObject) = Tender(o.getString("id"),o.getString("title"),o.optString("department"),
-        o.optString("location"),o.optString("value"),o.optString("deadline"),o.optString("source"),o.optString("url"),0,o.optString("summary"),emptyList())
+        o.optString("location"),o.optString("value"),o.optString("deadline"),o.optString("source"),o.optString("url"),0,o.optString("summary"),emptyList(),o.optString("evidence"))
     fun checklist(id: String): Set<String> = prefs.getStringSet("check_$id",emptySet())?.toSet() ?: emptySet()
     fun setChecklist(id:String, value:Set<String>) { prefs.edit().putStringSet("check_$id",value).apply() }
 }
