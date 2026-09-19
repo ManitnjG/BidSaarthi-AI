@@ -47,7 +47,7 @@ class MainActivity:ComponentActivity(){
  val tenders=syncs.flatMap{it.tenders}.filter{query.isBlank()||it.title.contains(query,true)||it.department.contains(query,true)}
  Column(Modifier.fillMaxSize().padding(horizontal=16.dp,vertical=12.dp)){
   Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Opportunity Radar",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold);Text("Official opportunities matched to your business",color=MaterialTheme.colorScheme.onSurfaceVariant)};IconButton(onClick={sync()}){Icon(Icons.Default.Refresh,"Sync")}}
-  OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),singleLine=true,shape=MaterialTheme.shapes.large,placeholder={Text("Search tenders or departments")},leadingIcon={Icon(Icons.Default.Search,null)},trailingIcon={if(query.isNotEmpty()){{IconButton({query=""}){Icon(Icons.Default.Close,"Clear")}}}else null})
+  OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),singleLine=true,shape=MaterialTheme.shapes.large,placeholder={Text("Search tenders or departments")},leadingIcon={Icon(Icons.Default.Search,null)},trailingIcon={ if(query.isNotEmpty()) IconButton(onClick={query=""}){Icon(Icons.Default.Close,"Clear")} })
   Spacer(Modifier.height(12.dp))
   LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp)){
    item{SourcePanel(syncs,syncing)}
