@@ -39,7 +39,7 @@ class MainActivity:ComponentActivity(){
 }
 
 @Composable fun Radar(){
- val repo=remember{TenderRepository()}; val scope=rememberCoroutineScope()
+ val ctx=LocalContext.current; val repo=remember{TenderRepository(ctx)}; val scope=rememberCoroutineScope()
  var syncing by remember{mutableStateOf(false)}; var syncs by remember{mutableStateOf<List<SourceSync>>(emptyList())}
  var query by remember{mutableStateOf("")}
  fun sync(){scope.launch{syncing=true;syncs=repo.syncAll();syncing=false}}
