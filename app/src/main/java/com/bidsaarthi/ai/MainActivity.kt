@@ -73,7 +73,7 @@ class MainActivity:ComponentActivity(){
 @Composable fun TenderCard(t:Tender){val ctx=LocalContext.current;var expanded by remember{mutableStateOf(false)};ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp)){AssistChip(onClick={},label={Text(t.source)});Text(t.title,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium);Text(t.department);Text("Closes: ${t.deadline}");Spacer(Modifier.height(6.dp));Text(t.summary)
 Spacer(Modifier.height(8.dp))
 OutlinedButton(onClick={expanded=!expanded}){Icon(Icons.Default.AutoAwesome,null);Text(if(expanded)" Hide AI Analysis" else " AI Analysis")}
-if(expanded){ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(12.dp)){Text("AI Analysis",fontWeight=FontWeight.Bold);Text("Eligibility: VERIFY");Text("Opportunity score: ${t.readiness}/100");Text("Summary: ${t.summary}");Text("Missing documents: verify tender document");Text("Risks: confirm eligibility and corrigenda on official source");Text("Evidence: ${t.title}",style=MaterialTheme.typography.bodySmall)}}}
+if(expanded){ElevatedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(12.dp)){Text("AI Analysis",fontWeight=FontWeight.Bold);Text("AI status: Evidence analysis requires the live BidSaarthi backend.");Text("This APK will not invent an eligibility verdict or score.");Text("Tender reference: ${t.summary}");Text("Open the official tender document for requirements until the AI backend is reachable.",style=MaterialTheme.typography.bodySmall)}}}
 Button(onClick={
  val sourceHome=when {
   t.source.contains("CPPP",true)->"https://eprocure.gov.in/eprocure/app"
