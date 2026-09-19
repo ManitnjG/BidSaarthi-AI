@@ -1,6 +1,9 @@
 package com.bidsaarthi.ai
 
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -145,19 +148,33 @@ class MainActivity: ComponentActivity() {
    item { Text("Reference: ${t.summary}",style=MaterialTheme.typography.bodySmall)
     Button(onClick={runCatching { val uri=Uri.parse(t.url);require(uri.scheme=="https" || uri.scheme=="http");ctx.startActivity(Intent(Intent.ACTION_VIEW,uri)) }.onFailure { error="Could not open the official link." }},modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.OpenInNew,null);Spacer(Modifier.width(8.dp));Text(if(t.url.contains("tendersfullview",true) || t.url.contains("directlink",true) || t.url.contains("/tender/",true)) "Open official notice" else "Open source portal") }
    }
-   item { HorizontalDivider();Text("Evidence-based analysis",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+   item {
+    Text("Some government notice links expire. If a link is invalid, open the source portal and search using the reference.",style=MaterialTheme.typography.bodySmall)
+    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+     TextButton(onClick={
+      val clipboard=ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+      clipboard.setPrimaryClip(ClipData.newPlainText("Tender reference",t.summary.substringBefore(" • ").ifBlank { t.id }))
+     }) { Text("Copy reference") }
+     TextButton(onClick={
+      val url=TenderSources.all.firstOrNull { it.name==t.source }?.baseUrl ?: "https://eprocure.gov.in/cppp/latestactivetendersnew/cpppdata"
+      runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url))) }.onFailure { error="Unable to open the source portal." }
+     }) { Text("Source portal") }
+    }
+   }
+   item { HorizontalDivider();Text("Free tender checks & AI",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
     Text("Analysis uses available listing text. Full tender documents must be checked for eligibility, EMD, exemptions and amendments.",style=MaterialTheme.typography.bodySmall)
+    OutlinedButton(onClick={error=null;result=basicAnalysis(t,profile)},modifier=Modifier.fillMaxWidth()){Text("Free offline check · no key needed")}
     FilledTonalButton(enabled=!loading,onClick={scope.launch { loading=true;error=null
      try { result=BackendApi(BuildConfig.BACKEND_URL).analyze(t,profile) }
-     catch(e:Exception) { error=e.message ?: "Analysis failed. Please retry." }
+     catch(e:Exception) { result=basicAnalysis(t,profile,"Online AI is unavailable. Showing offline checks.");error=e.message ?: "Analysis failed. Please retry." }
      finally { loading=false }
-    }},modifier=Modifier.fillMaxWidth()){Text(if(loading) "Analyzing listing…" else "Analyze with my business profile")}
+    }},modifier=Modifier.fillMaxWidth()){Text(if(loading) "Analyzing listing…" else "Try free AI analysis")}
     if(loading) LinearProgressIndicator(Modifier.fillMaxWidth())
     error?.let { Text(it,color=MaterialTheme.colorScheme.error) }
    }
    result?.let { r ->
-    item { Text(if(r.optDouble("confidence",0.0)==0.0) "Analysis unavailable" else "Eligibility: requires document verification",fontWeight=FontWeight.Bold)
-     Text(r.optString("summary")); }
+    item { Text(if(r.optString("analysis_mode")=="RULE_BASED") "Free basic check · not AI" else if(r.optDouble("confidence",0.0)==0.0) "Analysis unavailable" else "AI analysis · verify full documents",fontWeight=FontWeight.Bold)
+     Text(r.optString("summary")); Text("Eligibility: not confirmed",style=MaterialTheme.typography.labelMedium); }
     for(key in listOf("eligibility_reasons","missing_documents","risks")) {
      val a=r.optJSONArray(key) ?: JSONArray()
      if(a.length()>0) item { Text(key.replace('_',' ').replaceFirstChar { it.uppercase() },fontWeight=FontWeight.Bold);for(i in 0 until a.length()) Text("• "+a.optString(i)) }

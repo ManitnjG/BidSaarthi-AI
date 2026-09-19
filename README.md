@@ -23,3 +23,9 @@ Analysis currently reads listing text, not complete tender PDFs. GeM and Karnata
 
 ## Tests
 `PYTHONPATH=backend pytest -q backend/tests`
+
+## Free analysis
+Free mode is enabled by default and does not use existing paid API keys. The app includes offline, rule-based keyword/deadline checks, clearly labelled as basic checks rather than AI.
+For generative AI, add `OPENROUTER_API_KEY` in the backend environment. The default model is `openrouter/free`; `BIDSAARTHI_FREE_MODEL` may select another `:free` model. Free providers have quotas and availability limits; failures fall back to basic checks. No provider key is embedded in the APK.
+Paid providers require an explicit `BIDSAARTHI_ALLOW_PAID_AI=true` setting.
+Official provider documentation: https://openrouter.ai/docs/cookbook/get-started/free-models-router-playground

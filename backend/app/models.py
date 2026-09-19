@@ -7,4 +7,5 @@ class BusinessDNA(BaseModel):
 class MatchResult(BaseModel):
  tender:Tender; score:int; reasons:list[str]; missing:list[str]
 class Analysis(BaseModel):
+ analysis_mode:Literal["AI","RULE_BASED"]="AI"; provider:str=""
  tender_id:str; structured:dict=Field(default_factory=dict); eligibility:Literal["ELIGIBLE","NOT_ELIGIBLE","UNKNOWN"]="UNKNOWN"; eligibility_reasons:list[str]=Field(default_factory=list); missing_documents:list[str]=Field(default_factory=list); opportunity_score:int=Field(default=0,ge=0,le=100); summary:str=""; risks:list[str]=Field(default_factory=list); evidence:dict[str,str]=Field(default_factory=dict); confidence:float=Field(default=0,ge=0,le=1)

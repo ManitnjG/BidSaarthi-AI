@@ -63,3 +63,51 @@ def test_cppp_slashes_preserved_in_reference():
     assert row.title == 'Solar installation'
     assert row.reference_no == 'EE/Kanpur/2026-27'
     assert row.department == 'Public Works Department'
+
+
+def test_paid_keys_are_not_used_in_free_mode(monkeypatch):
+    from app.llm import client
+    monkeypatch.delenv('OPENROUTER_API_KEY', raising=False)
+    monkeypatch.delenv('BIDSAARTHI_ALLOW_PAID_AI', raising=False)
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-not-a-real-key')
+    assert client() is None
+
+
+def test_free_router_rejects_paid_model(monkeypatch):
+    from app.llm import OpenRouterFreeClient
+    from app.models import Tender
+    monkeypatch.setenv('BIDSAARTHI_FREE_MODEL', 'paid/model')
+    tender = Tender(id='x',source_id='cppp',source_url='https://eprocure.gov.in/tender/1',title='Solar',evidence={'listing':'Solar'})
+    with pytest.raises(ValueError, match='Only free'):
+        asyncio.run(OpenRouterFreeClient('test-not-a-real-key').extract(tender))
+
+
+def test_free_fallback_never_claims_ai_or_eligibility():
+    from app.basic_analysis import basic_analysis
+    from app.models import Tender
+    tender = Tender(id='x',source_id='cppp',source_url='https://eprocure.gov.in/tender/1',title='Solar work',closes_at='01-Jan-2020 10:00 AM',evidence={'listing':'Solar work'})
+    result = basic_analysis(tender,BusinessDNA(categories=['Solar']))
+    assert result.analysis_mode == 'RULE_BASED'
+    assert result.eligibility == 'UNKNOWN'
+    assert result.opportunity_score == 0
+    assert any('Solar' in s for s in result.eligibility_reasons)
+    assert any('passed' in s for s in result.risks)
+
+
+def test_free_router_schema_and_evidence(monkeypatch):
+    import json, httpx
+    from app.llm import OpenRouterFreeClient
+    from app.models import Tender
+    real_client = httpx.AsyncClient
+    def handle(request):
+        payload = json.loads(request.content)
+        assert payload['model'] == 'openrouter/free'
+        assert payload['response_format']['type'] == 'json_schema'
+        return httpx.Response(200,json={'choices':[{'message':{'content':json.dumps({'summary':'Solar work','gst_required':True,'required_documents':['Invented document'],'evidence':{'gst_required':'Invented GST requirement','summary':'Solar work'}})}}]})
+    monkeypatch.delenv('BIDSAARTHI_FREE_MODEL', raising=False)
+    monkeypatch.setattr(httpx,'AsyncClient',lambda **kw: real_client(transport=httpx.MockTransport(handle),trust_env=False,**kw))
+    tender = Tender(id='x',source_id='cppp',source_url='https://eprocure.gov.in/tender/1',title='Solar work',evidence={'listing':'Solar work'})
+    result = asyncio.run(OpenRouterFreeClient('test-not-a-real-key').extract(tender))
+    assert result['gst_required'] is None
+    assert result['required_documents'] == []
+    assert result['evidence'] == {'summary':'Solar work'}
