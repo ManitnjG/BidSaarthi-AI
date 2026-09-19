@@ -40,8 +40,8 @@ class TenderRepository(private val context: Context) {
                 val exactUrl = obj.optString("source_url")
                 val refNo = obj.optString("reference_no")
                 val title = obj.optString("title")
-                if (title.isBlank() || refNo.isBlank() || exactUrl.isBlank() || exactUrl == source.baseUrl) continue
                 val source = TenderSources.all.firstOrNull { it.id == sourceId } ?: continue
+                if (title.isBlank() || refNo.isBlank() || exactUrl.isBlank() || exactUrl == source.baseUrl) continue
                 grouped.getOrPut(sourceId) { mutableListOf() }.add(
                     Tender(
                         id = obj.optString("id"),
