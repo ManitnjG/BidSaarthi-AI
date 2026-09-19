@@ -10,3 +10,11 @@ def test_row_parser_no_title_corruption():
 def test_analysis_schema():
  a=Analysis(tender_id="x",eligibility="UNKNOWN",opportunity_score=50,confidence=.5)
  assert a.opportunity_score==50
+
+def test_nested_layout_row_is_not_tender():
+    html='''<table><tr><td><div>Navigation MIS Reports</div><table><tr><th>Tender Title</th><th>Reference No</th><th>Closing Date</th></tr><tr><td><a href="/tender/3">Supply of UPS systems</a></td><td>UPS/2026/03</td><td>30-Sep-2026 05:00 PM</td></tr></table></td></tr></table>'''
+    rows=parse(SOURCES[0],html)
+    assert len(rows)==1
+    assert rows[0].title=="Supply of UPS systems"
+    assert rows[0].reference_no=="UPS/2026/03"
+    assert "MIS Reports" not in rows[0].title
