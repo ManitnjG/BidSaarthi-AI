@@ -37,19 +37,23 @@ class TenderRepository(private val context: Context) {
             try {
                 val obj = array.getJSONObject(i)
                 val sourceId = obj.optString("source_id")
+                val exactUrl = obj.optString("source_url")
+                val refNo = obj.optString("reference_no")
+                val title = obj.optString("title")
+                if (title.isBlank() || refNo.isBlank() || exactUrl.isBlank() || exactUrl == source.baseUrl) continue
                 val source = TenderSources.all.firstOrNull { it.id == sourceId } ?: continue
                 grouped.getOrPut(sourceId) { mutableListOf() }.add(
                     Tender(
                         id = obj.optString("id"),
-                        title = obj.optString("title"),
+                        title = title,
                         department = obj.optString("department", source.name),
                         location = obj.optString("location", "India"),
                         value = if (obj.isNull("value")) "Refer official tender document" else obj.optString("value", "Refer official tender document"),
                         deadline = obj.optString("closes_at"),
                         source = source.name,
-                        url = obj.optString("source_url", source.baseUrl),
+                        url = exactUrl,
                         readiness = 0,
-                        summary = listOf(obj.optString("reference_no"), "Official public listing")
+                        summary = listOf(refNo, "Official public listing")
                             .filter { it.isNotBlank() }
                             .joinToString(" • "),
                         requirements = listOf(
