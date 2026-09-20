@@ -7,7 +7,7 @@ from .engine import dedupe,match
 from .models import BusinessDNA,Tender,Entitlement
 from .llm import analyze
 from .sources import SOURCES
-from .store import init,upsert,list_tenders,get_tender,has_changes
+from .store import init,upsert,list_tenders,get_tender,has_changes,tender_changes,search_tenders
 from .production_db import production_database_configured
 app=FastAPI(title="BidSaarthi API",version="1.0.0",description="Evidence-first Indian tender intelligence API. Official issuing authorities remain authoritative.");init()
 @app.get("/health")
@@ -63,11 +63,8 @@ def v1_health():
 @app.get("/api/v1/tenders")
 def v1_tenders(q:str="",limit:int=50,offset:int=0,source_id:str|None=None,state:str|None=None):
  limit=max(1,min(limit,100));offset=max(0,offset)
- rows=list_tenders(q, min(offset+limit,1000))
- if source_id: rows=[x for x in rows if x.get("source_id")==source_id]
- if state: rows=[x for x in rows if state.lower() in (x.get("location") or "").lower()]
- page=rows[offset:offset+limit]
- return {"items":page,"count":len(page),"offset":offset,"limit":limit,"disclaimer":"Verify all requirements and amendments with the issuing authority."}
+ page=search_tenders(q,limit,offset,source_id,state)
+ return {"items":page,"count":len(page),"offset":offset,"limit":limit,"has_more":len(page)==limit,"disclaimer":"Verify all requirements and amendments with the issuing authority."}
 
 @app.get("/api/v1/tenders/{tender_id}")
 def v1_tender(tender_id:str):
@@ -110,10 +107,31 @@ def readiness():
 @app.get("/api/v1/tenders/{tender_id}/changes")
 def v1_changes(tender_id:str):
  if not get_tender(tender_id): raise HTTPException(404,"Tender not found")
- return {"tender_id":tender_id,"changed":has_changes(tender_id)}
+ return {"tender_id":tender_id,"changed":has_changes(tender_id),"history":tender_changes(tender_id)}
 
 @app.get("/api/v1/tenders/{tender_id}/documents")
 def v1_documents(tender_id:str):
  raw=get_tender(tender_id)
  if not raw: raise HTTPException(404,"Tender not found")
  return {"items":raw.get("document_urls",[]),"note":"Only publicly captured official document URLs are returned; protected documents are not bypassed."}
+
+
+@app.get("/api/v1/alerts")
+def v1_alerts(limit:int=100):
+ from datetime import datetime,timedelta
+ now=datetime.now(); out=[]
+ for raw in list_tenders(limit=min(max(limit,1),200)):
+  t=Tender(**raw); kinds=[]
+  if has_changes(t.id): kinds.append("TENDER_UPDATED")
+  if t.closes_at:
+   for fmt in ("%d-%b-%Y %I:%M %p","%d-%b-%Y %H:%M"):
+    try:
+     d=datetime.strptime(t.closes_at,fmt); hours=(d-now).total_seconds()/3600
+     if 0<=hours<=24:kinds.append("DEADLINE_24H")
+     elif 24<hours<=48:kinds.append("DEADLINE_48H")
+     elif 48<hours<=72:kinds.append("DEADLINE_3D")
+     elif 72<hours<=168:kinds.append("DEADLINE_7D")
+     break
+    except ValueError: pass
+  if kinds: out.append({"tender_id":t.id,"title":t.title,"kinds":kinds,"closes_at":t.closes_at})
+ return {"items":out,"generated_at":now.isoformat(),"note":"Alerts are evidence-based; delivery preferences require an authenticated account."}
