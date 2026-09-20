@@ -8,6 +8,7 @@ from .models import BusinessDNA,Tender,Entitlement
 from .llm import analyze
 from .sources import SOURCES
 from .store import init,upsert,list_tenders,get_tender,has_changes
+from .production_db import production_database_configured
 app=FastAPI(title="BidSaarthi API",version="1.0.0",description="Evidence-first Indian tender intelligence API. Official issuing authorities remain authoritative.");init()
 @app.get("/health")
 def health():return {"ok":True}
@@ -93,3 +94,26 @@ async def v1_analysis(tender_id:str,request:Request,business:BusinessDNA|None=No
  raw=get_tender(tender_id)
  if not raw: raise HTTPException(404,"Tender not found")
  return await analyze_listing(ListingRequest(tender=Tender(**raw),business=business or BusinessDNA()),request)
+
+
+@app.get("/api/v1/readiness")
+def readiness():
+ return {
+  "service":"BidSaarthi",
+  "api":"v1",
+  "database":{"postgresql_configured":production_database_configured()},
+  "ai":{"server_side":True,"openrouter_configured":bool(os.getenv("OPENROUTER_API_KEY"))},
+  "billing":{"server_verified":False,"commercial_unlock_enabled":False},
+  "disclaimer":"Not affiliated with any government. Official issuing-authority documents are authoritative."
+ }
+
+@app.get("/api/v1/tenders/{tender_id}/changes")
+def v1_changes(tender_id:str):
+ if not get_tender(tender_id): raise HTTPException(404,"Tender not found")
+ return {"tender_id":tender_id,"changed":has_changes(tender_id)}
+
+@app.get("/api/v1/tenders/{tender_id}/documents")
+def v1_documents(tender_id:str):
+ raw=get_tender(tender_id)
+ if not raw: raise HTTPException(404,"Tender not found")
+ return {"items":raw.get("document_urls",[]),"note":"Only publicly captured official document URLs are returned; protected documents are not bypassed."}
