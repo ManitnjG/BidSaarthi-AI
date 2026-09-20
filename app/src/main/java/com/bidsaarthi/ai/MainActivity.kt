@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import com.bidsaarthi.ai.data.*
 import com.bidsaarthi.ai.model.Tender
 import com.bidsaarthi.ai.ui.theme.BidSaarthiTheme
-import com.bidsaarthi.ai.ui.FreeAiSettings
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -182,7 +181,6 @@ class MainActivity: ComponentActivity() {
     OutlinedButton(onClick={error=null;result=basicAnalysis(t,profile)},modifier=Modifier.fillMaxWidth()){Text("Free offline check · no key needed")}
     FilledTonalButton(enabled=!loading,onClick={scope.launch { loading=true;error=null
      try {
-      val key=FreeAiKeyStore(ctx).read()
       result=BackendApi(BuildConfig.BACKEND_URL).analyze(t,profile)
      }
      catch(e:Exception) { result=basicAnalysis(t,profile,"Online AI is unavailable. Showing offline checks.");error=e.message ?: "Analysis failed. Please retry." }
@@ -226,7 +224,6 @@ class MainActivity: ComponentActivity() {
  var gst by remember { mutableStateOf(initial.optBoolean("has_gst",false)) };var udyam by remember { mutableStateOf(initial.optBoolean("has_udyam",false)) }
  var message by remember { mutableStateOf("") }
  LazyColumn(Modifier.fillMaxSize().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-  item { FreeAiSettings() }
   item { Text("Your business",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold);Text("Enter accurate details for tender relevance and analysis.") }
   item { OutlinedTextField(name,{name=it;message=""},Modifier.fillMaxWidth(),label={Text("Business name")},singleLine=true) }
   item { OutlinedTextField(state,{state=it;message=""},Modifier.fillMaxWidth(),label={Text("State")},singleLine=true) }
@@ -238,6 +235,6 @@ class MainActivity: ComponentActivity() {
    if(turnover.isNotBlank() && (amount==null || !amount.isFinite() || amount<0)) message="Enter a valid turnover amount in rupees."
    else { onSave(JSONObject().put("name",name.trim()).put("states",JSONArray(listOf(state.trim()).filter { it.isNotBlank() })).put("turnover",amount ?: JSONObject.NULL).put("categories",JSONArray(categories.split(',').map { it.trim() }.filter { it.isNotBlank() })).put("has_gst",gst).put("has_udyam",udyam));message="Profile saved on this device." }
   },modifier=Modifier.fillMaxWidth()){Text("Save business profile")};Text(message,style=MaterialTheme.typography.bodySmall)
-  Text("When you request analysis, your profile and the listing are sent to the configured analysis service. Optional provider keys are encrypted on this device.",style=MaterialTheme.typography.bodySmall) }
+  Text("AI analysis is provided securely by the BidSaarthi backend. No API key is required in the app.",style=MaterialTheme.typography.bodySmall) }
  }
 }
