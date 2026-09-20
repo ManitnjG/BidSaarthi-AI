@@ -28,6 +28,7 @@ import com.bidsaarthi.ai.data.*
 import com.bidsaarthi.ai.model.Tender
 import com.bidsaarthi.ai.ui.theme.BidSaarthiTheme
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.DateFormat
@@ -181,12 +182,15 @@ class MainActivity: ComponentActivity() {
     OutlinedButton(onClick={error=null;result=basicAnalysis(t,profile)},modifier=Modifier.fillMaxWidth()){Text("Free offline check · no key needed")}
     FilledTonalButton(enabled=!loading,onClick={scope.launch { loading=true;error=null
      try {
-      result=BackendApi(BuildConfig.BACKEND_URL).analyze(t,profile)
+      result=withTimeout(65000L) { BackendApi(BuildConfig.BACKEND_URL).analyze(t,profile) }
      }
-     catch(e:Exception) { result=basicAnalysis(t,profile,"Online AI is unavailable. Showing offline checks.");error=e.message ?: "Analysis failed. Please retry." }
+     catch(e:Exception) {
+      result=basicAnalysis(t,profile,"Online AI did not complete. Showing offline checks.")
+      error=if(e is kotlinx.coroutines.TimeoutCancellationException) "AI took too long. Please retry." else (e.message ?: "Analysis failed. Please retry.")
+     }
      finally { loading=false }
-    }},modifier=Modifier.fillMaxWidth()){Text(if(loading) "Analyzing listing…" else "Try free AI analysis")}
-    if(loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+    }},modifier=Modifier.fillMaxWidth()){Text(if(loading) "Analyzing… up to 60 seconds" else "AI bid analysis")}
+    if(loading) { LinearProgressIndicator(Modifier.fillMaxWidth());Text("You can close this sheet and retry if the network is slow.",style=MaterialTheme.typography.labelSmall) }
     error?.let { Text(it,color=MaterialTheme.colorScheme.error) }
    }
    result?.let { r ->
