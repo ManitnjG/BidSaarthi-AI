@@ -92,7 +92,7 @@ class MainActivity: ComponentActivity() {
 
 @Composable fun HomeDashboard(all:List<Tender>,saved:Set<String>,onOpen:(Tender)->Unit,onDiscover:()->Unit) {
  val now=System.currentTimeMillis(); val active=all.filter { deadlineMillis(it.deadline)?.let { d->d>=now } ?: true }; val closing=active.sortedBy { deadlineMillis(it.deadline) ?: Long.MAX_VALUE }.take(5)
- LazyColumn(Modifier.fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(vertical=12.dp,bottom=24.dp)) {
+ LazyColumn(Modifier.fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(start=0.dp,top=12.dp,end=0.dp,bottom=24.dp)) {
   item { Text("Tender intelligence",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold); Text("Discover • qualify • prepare • track",style=MaterialTheme.typography.bodySmall) }
   item { ElevatedCard(onClick=onDiscover,modifier=Modifier.fillMaxWidth()) { Row(Modifier.padding(16.dp),verticalAlignment=Alignment.CenterVertically) { Icon(Icons.Default.AutoAwesome,null); Spacer(Modifier.width(10.dp)); Column { Text("AI + advanced search",fontWeight=FontWeight.Bold); Text("Search work, authority, state, value and deadline",style=MaterialTheme.typography.bodySmall) } } } }
   item { Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) { AssistChip(onClick=onDiscover,label={Text(active.size.toString()+" Active")}); AssistChip(onClick={},label={Text(saved.size.toString()+" Saved")}); AssistChip(onClick={},label={Text("Corrigenda")}); AssistChip(onClick={},label={Text("Alerts")}) } }
