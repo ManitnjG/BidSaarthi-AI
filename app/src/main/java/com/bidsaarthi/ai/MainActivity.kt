@@ -68,10 +68,10 @@ class MainActivity: ComponentActivity() {
    },
    bottomBar = {
     NavigationBar {
-     listOf("Discover","Saved","Workspace","Business").forEachIndexed { i,label ->
+     listOf("Home","Discover","Saved","Workspace","Business").forEachIndexed { i,label ->
       NavigationBarItem(
        selected=tab==i, onClick={tab=i},
-       icon={Icon(listOf(Icons.Default.Search,Icons.Default.Bookmark,Icons.Default.Checklist,Icons.Default.Business)[i],label)},
+       icon={Icon(listOf(Icons.Default.Home,Icons.Default.Search,Icons.Default.Bookmark,Icons.Default.Checklist,Icons.Default.Business)[i],label)},
        label={Text(label)}
       )
      }
@@ -80,8 +80,9 @@ class MainActivity: ComponentActivity() {
   ) { padding -> Column(Modifier.padding(padding).fillMaxSize()) {
    if(syncing) LinearProgressIndicator(Modifier.fillMaxWidth())
    when(tab) {
-    0,1 -> TenderList(all, saved, tab==1, syncs, message, profile, {selected=it}, {t->store.toggle(t);saved=store.savedIds()})
-    2 -> Workspace(all.filter { it.id in saved },store) { selected=it }
+    0 -> HomeDashboard(all,saved,{selected=it},{tab=1})
+    1,2 -> TenderList(all, saved, tab==2, syncs, message, profile, {selected=it}, {t->store.toggle(t);saved=store.savedIds()})
+    3 -> Workspace(all.filter { it.id in saved },store) { selected=it }
     else -> Business(profile) { profile=it;store.saveProfile(it) }
    }
   } }
@@ -89,6 +90,17 @@ class MainActivity: ComponentActivity() {
  }
 }
 
+@Composable fun HomeDashboard(all:List<Tender>,saved:Set<String>,onOpen:(Tender)->Unit,onDiscover:()->Unit) {
+ val now=System.currentTimeMillis(); val active=all.filter { deadlineMillis(it.deadline)?.let { d->d>=now } ?: true }; val closing=active.sortedBy { deadlineMillis(it.deadline) ?: Long.MAX_VALUE }.take(5)
+ LazyColumn(Modifier.fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(vertical=12.dp,bottom=24.dp)) {
+  item { Text("Tender intelligence",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold); Text("Discover • qualify • prepare • track",style=MaterialTheme.typography.bodySmall) }
+  item { ElevatedCard(onClick=onDiscover,modifier=Modifier.fillMaxWidth()) { Row(Modifier.padding(16.dp),verticalAlignment=Alignment.CenterVertically) { Icon(Icons.Default.AutoAwesome,null); Spacer(Modifier.width(10.dp)); Column { Text("AI + advanced search",fontWeight=FontWeight.Bold); Text("Search work, authority, state, value and deadline",style=MaterialTheme.typography.bodySmall) } } } }
+  item { Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) { AssistChip(onClick=onDiscover,label={Text(active.size.toString()+" Active")}); AssistChip(onClick={},label={Text(saved.size.toString()+" Saved")}); AssistChip(onClick={},label={Text("Corrigenda")}); AssistChip(onClick={},label={Text("Alerts")}) } }
+  item { Text("Closing soon",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
+  items(closing,key={"home-"+it.id}) { t -> ElevatedCard(onClick={onOpen(t)},modifier=Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) { Text(t.title,maxLines=2,fontWeight=FontWeight.SemiBold); Text(t.department+" • "+t.location,style=MaterialTheme.typography.bodySmall); Text("Closes "+t.deadline,style=MaterialTheme.typography.labelSmall) } } }
+  item { OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp)) { Text("Bid workspace",fontWeight=FontWeight.Bold); Text("Eligibility • Documents • Corrigenda • BOQ • Tasks • Exports",style=MaterialTheme.typography.bodySmall); Text("AI findings must show official evidence or Needs verification.",style=MaterialTheme.typography.labelSmall) } } }
+ }
+}
 @Composable fun TenderList(all:List<Tender>,saved:Set<String>,onlySaved:Boolean,syncs:List<SourceSync>,message:String?,profile:JSONObject,onOpen:(Tender)->Unit,onSave:(Tender)->Unit) {
  var query by remember { mutableStateOf("") }; var source by remember { mutableStateOf("All") }
  var region by remember { mutableStateOf("All India") };var regionMenu by remember { mutableStateOf(false) }
