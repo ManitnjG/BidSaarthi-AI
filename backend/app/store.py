@@ -74,3 +74,24 @@ def has_changes(tender_id):
             "select count(*) from tender_history where tender_id=?",
             (tender_id,),
         ).fetchone()[0] > 0
+
+
+def tender_changes(tender_id,limit=20):
+    init()
+    with sqlite3.connect(DB) as c:
+        rows=c.execute(
+            "select content_hash,closes_at,payload,created_at from tender_history where tender_id=? order by id desc limit ?",
+            (tender_id,max(1,min(limit,100))),
+        ).fetchall()
+    return [{"content_hash":r[0],"closes_at":r[1],"payload":json.loads(r[2]),"created_at":r[3]} for r in rows]
+
+def search_tenders(q="",limit=50,offset=0,source_id=None,state=None):
+    init(); limit=max(1,min(limit,100)); offset=max(0,offset)
+    terms=f"%{q.strip()}%"
+    sql="select payload from tenders where (title like ? or payload like ?)"
+    args=[terms,terms]
+    if source_id: sql+=" and source_id=?"; args.append(source_id)
+    if state: sql+=" and payload like ?"; args.append(f"%{state}%")
+    sql+=" order by updated_at desc limit ? offset ?"; args.extend([limit,offset])
+    with sqlite3.connect(DB) as c: rows=c.execute(sql,args).fetchall()
+    return [json.loads(r[0]) for r in rows]
