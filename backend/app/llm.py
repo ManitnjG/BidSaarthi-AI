@@ -74,6 +74,16 @@ Evidence values must be short exact excerpts copied from the listing."""
   headers={"Authorization":"Bearer "+self.key,"Content-Type":"application/json","HTTP-Referer":"https://github.com/ManitnjG/BidSaarthi-AI","X-Title":"BidSaarthi AI"}
   async with httpx.AsyncClient(timeout=60) as c:
    r=await c.post("https://openrouter.ai/api/v1/chat/completions",headers=headers,json=payload)
+   # Some free routed models do not implement strict response_format. Retry once
+   # without it; evidence validation below still prevents unsupported claims.
+   if r.status_code == 400:
+    fallback_payload = dict(payload)
+    fallback_payload.pop("response_format", None)
+    fallback_payload["messages"] = [
+     {"role":"system","content":system + "\\nReturn keys: value, emd, fee, category, state, turnover_required, experience_required, gst_required, udyam_required, eligibility_notes, required_documents, risks, summary, evidence."},
+     {"role":"user","content":source},
+    ]
+    r=await c.post("https://openrouter.ai/api/v1/chat/completions",headers=headers,json=fallback_payload)
    r.raise_for_status()
    data=r.json()
   content=data.get("choices",[{}])[0].get("message",{}).get("content","")
