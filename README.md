@@ -29,3 +29,10 @@ Free mode is enabled by default and does not use existing paid API keys. The app
 For generative AI, add `OPENROUTER_API_KEY` in the backend environment. The default model is `openrouter/free`; `BIDSAARTHI_FREE_MODEL` may select another `:free` model. Free providers have quotas and availability limits; failures fall back to basic checks. No provider key is embedded in the APK.
 Paid providers require an explicit `BIDSAARTHI_ALLOW_PAID_AI=true` setting.
 Official provider documentation: https://openrouter.ai/docs/cookbook/get-started/free-models-router-playground
+
+## Version 0.5 — nationwide discovery and in-app free AI
+- Source directory represents all 28 states and 8 union territories, plus CPPP, GeM and Railways. Directory presence does not imply live or complete coverage.
+- Public NIC homepage rows and national-feed pagination are supported. National feeds scan up to 30 pages per run (configurable up to 100), retain a continuation checkpoint and accumulate unexpired, evidenced listings across scheduled runs.
+- Coverage reports show source status, collected records, pages checked and official totals where available. Authentication/CAPTCHA-only sources stay portal-only; no access controls are bypassed. The new West Bengal portal is listed separately from its older NIC portal.
+- Business → Free AI accepts an OpenRouter key once, encrypted with Android Keystore. Requests go directly to OpenRouter using `openrouter/free`; no Render changes are required. The key is never embedded in source or the APK. Without a key, generative AI is not activated; clearly labelled offline rules still work.
+- Complete coverage of every Indian tender is not guaranteed. Public feeds, procurement portals and their access rules vary, and ongoing pagination takes multiple refreshes.

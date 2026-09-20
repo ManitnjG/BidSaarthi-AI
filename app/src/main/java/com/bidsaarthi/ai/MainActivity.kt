@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.bidsaarthi.ai.data.*
 import com.bidsaarthi.ai.model.Tender
 import com.bidsaarthi.ai.ui.theme.BidSaarthiTheme
+import com.bidsaarthi.ai.ui.FreeAiSettings
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -48,7 +49,7 @@ class MainActivity: ComponentActivity() {
  var profile by remember { mutableStateOf(store.profile()) }
  var selected by remember { mutableStateOf<Tender?>(null) }
  fun sync() { if(syncing)return; scope.launch { syncing=true
-   try { syncs=repo.syncAll(); message=if(syncs.any { it.error != null && it.source.id in listOf("cppp","state") }) "Some sources could not refresh. Saved listings remain available." else "Refresh complete. Check each notice before bidding." }
+   try { syncs=repo.syncAll(); message="Open source status for coverage and freshness. Full India coverage is not yet verified." }
    catch(e:Exception) { message="Unable to refresh. Saved listings remain available." }
    finally { syncing=false }
  } }
@@ -90,10 +91,12 @@ class MainActivity: ComponentActivity() {
 
 @Composable fun TenderList(all:List<Tender>,saved:Set<String>,onlySaved:Boolean,syncs:List<SourceSync>,message:String?,profile:JSONObject,onOpen:(Tender)->Unit,onSave:(Tender)->Unit) {
  var query by remember { mutableStateOf("") }; var source by remember { mutableStateOf("All") }
+ var region by remember { mutableStateOf("All India") };var regionMenu by remember { mutableStateOf(false) }
  var activeOnly by remember { mutableStateOf(true) }; var soonest by remember { mutableStateOf(true) }
  var showSources by remember { mutableStateOf(false) }
  val now=System.currentTimeMillis()
  val filtered=all.filter { t -> (!onlySaved || t.id in saved) && (source=="All" || t.source==source) &&
+  (region=="All India" || t.location.contains(region,true) || TenderSources.all.any { it.name==t.source && it.region==region }) &&
   (query.isBlank() || "${t.title} ${t.department} ${t.location} ${t.summary}".contains(query,true)) &&
   (!activeOnly || onlySaved || (deadlineMillis(t.deadline)?.let { it>=now } ?: true)) }
  val rows=if(soonest) filtered.sortedBy { deadlineMillis(it.deadline) ?: Long.MAX_VALUE } else filtered.sortedBy { it.title }
@@ -102,6 +105,12 @@ class MainActivity: ComponentActivity() {
    Text("${rows.size} listings · Verify status on the official notice",style=MaterialTheme.typography.bodySmall)
   }
   item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),singleLine=true,label={Text("Search work, department or location")},leadingIcon={Icon(Icons.Default.Search,null)}) }
+  item { Box {
+   OutlinedButton(onClick={regionMenu=true}) { Text(region+" ▾") }
+   DropdownMenu(expanded=regionMenu,onDismissRequest={regionMenu=false},modifier=Modifier.heightIn(max=360.dp)) {
+    (listOf("All India")+TenderSources.regions).forEach { name -> DropdownMenuItem(text={Text(name)},onClick={region=name;regionMenu=false}) }
+   }
+  } }
   item { Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
    (listOf("All")+all.map { it.source }.distinct()).forEach { label -> FilterChip(selected=source==label,onClick={source=label},label={Text(label)}) }
   } }
@@ -113,9 +122,16 @@ class MainActivity: ComponentActivity() {
   if(message!=null) item { Text(message,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
   if(showSources) item { OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
    Text("Source freshness",fontWeight=FontWeight.Bold)
-   syncs.forEach { s -> Text(s.source.name+": "+if(s.source.id in listOf("gem","karnataka")) "Portal only — no feed" else (s.error ?: "Refreshed")+" · "+if(s.refreshedAt>0) DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(s.refreshedAt) else "Refresh time unknown",style=MaterialTheme.typography.bodySmall) }
+   syncs.filter { region=="All India" || it.source.region==region || it.source.region=="India" }.forEach { sourceSync ->
+    Text(sourceSync.source.name,fontWeight=FontWeight.SemiBold)
+    Text(sourceSync.error.orEmpty(),style=MaterialTheme.typography.bodySmall)
+    if(sourceSync.portalTotal!=null) Text("Portal reports ${sourceSync.portalTotal} tenders; this is not a claim that all have been collected.",style=MaterialTheme.typography.labelSmall)
+    Text(sourceSync.coverage+" · "+sourceSync.checkedAt.ifBlank { "Check time unknown" },style=MaterialTheme.typography.labelSmall)
+    val context=LocalContext.current
+    TextButton(onClick={runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(sourceSync.source.baseUrl))) }}) { Text("Open source") }
+   }
   } } }
-  if(rows.isEmpty()) item { OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(24.dp)) { Text(if(onlySaved) "No saved tenders yet" else "No matching listings",fontWeight=FontWeight.Bold);Text(if(onlySaved) "Save a tender to keep its details available offline." else "Try another search or source. Refresh to check for updates.") } } }
+  if(rows.isEmpty()) item { OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(24.dp)) { Text(if(onlySaved) "No saved tenders yet" else "No matching listings",fontWeight=FontWeight.Bold);Text(if(onlySaved) "Save a tender to keep its details available offline." else "No indexed listings match. Open source status to visit the official portal, or refresh for updates.") } } }
   items(rows,key={it.id}) { t -> TenderCard(t,t.id in saved,profile,{onOpen(t)},{onSave(t)}) }
  }
 }
@@ -165,7 +181,10 @@ class MainActivity: ComponentActivity() {
     Text("Analysis uses available listing text. Full tender documents must be checked for eligibility, EMD, exemptions and amendments.",style=MaterialTheme.typography.bodySmall)
     OutlinedButton(onClick={error=null;result=basicAnalysis(t,profile)},modifier=Modifier.fillMaxWidth()){Text("Free offline check · no key needed")}
     FilledTonalButton(enabled=!loading,onClick={scope.launch { loading=true;error=null
-     try { result=BackendApi(BuildConfig.BACKEND_URL).analyze(t,profile) }
+     try {
+      val key=FreeAiKeyStore(ctx).read()
+      result=if(key.isNullOrBlank()) BackendApi(BuildConfig.BACKEND_URL).analyze(t,profile) else FreeAiClient().analyze(t,profile,key)
+     }
      catch(e:Exception) { result=basicAnalysis(t,profile,"Online AI is unavailable. Showing offline checks.");error=e.message ?: "Analysis failed. Please retry." }
      finally { loading=false }
     }},modifier=Modifier.fillMaxWidth()){Text(if(loading) "Analyzing listing…" else "Try free AI analysis")}
@@ -173,7 +192,7 @@ class MainActivity: ComponentActivity() {
     error?.let { Text(it,color=MaterialTheme.colorScheme.error) }
    }
    result?.let { r ->
-    item { Text(if(r.optString("analysis_mode")=="RULE_BASED") "Free basic check · not AI" else if(r.optDouble("confidence",0.0)==0.0) "Analysis unavailable" else "AI analysis · verify full documents",fontWeight=FontWeight.Bold)
+    item { Text(if(r.optString("analysis_mode")=="RULE_BASED") "Free basic check · not AI" else if(r.optString("analysis_mode")=="AI") "AI analysis · verify full documents" else "Analysis unavailable",fontWeight=FontWeight.Bold)
      Text(r.optString("summary")); Text("Eligibility: not confirmed",style=MaterialTheme.typography.labelMedium); }
     for(key in listOf("eligibility_reasons","missing_documents","risks")) {
      val a=r.optJSONArray(key) ?: JSONArray()
@@ -207,6 +226,7 @@ class MainActivity: ComponentActivity() {
  var gst by remember { mutableStateOf(initial.optBoolean("has_gst",false)) };var udyam by remember { mutableStateOf(initial.optBoolean("has_udyam",false)) }
  var message by remember { mutableStateOf("") }
  LazyColumn(Modifier.fillMaxSize().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+  item { FreeAiSettings() }
   item { Text("Your business",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold);Text("Enter accurate details for tender relevance and analysis.") }
   item { OutlinedTextField(name,{name=it;message=""},Modifier.fillMaxWidth(),label={Text("Business name")},singleLine=true) }
   item { OutlinedTextField(state,{state=it;message=""},Modifier.fillMaxWidth(),label={Text("State")},singleLine=true) }
@@ -218,6 +238,6 @@ class MainActivity: ComponentActivity() {
    if(turnover.isNotBlank() && (amount==null || !amount.isFinite() || amount<0)) message="Enter a valid turnover amount in rupees."
    else { onSave(JSONObject().put("name",name.trim()).put("states",JSONArray(listOf(state.trim()).filter { it.isNotBlank() })).put("turnover",amount ?: JSONObject.NULL).put("categories",JSONArray(categories.split(',').map { it.trim() }.filter { it.isNotBlank() })).put("has_gst",gst).put("has_udyam",udyam));message="Profile saved on this device." }
   },modifier=Modifier.fillMaxWidth()){Text("Save business profile")};Text(message,style=MaterialTheme.typography.bodySmall)
-  Text("When you request analysis, your profile and the listing are sent to the configured analysis service. No API key is stored in the app.",style=MaterialTheme.typography.bodySmall) }
+  Text("When you request analysis, your profile and the listing are sent to the configured analysis service. Optional provider keys are encrypted on this device.",style=MaterialTheme.typography.bodySmall) }
  }
 }

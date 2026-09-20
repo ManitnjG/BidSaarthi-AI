@@ -12,7 +12,7 @@ app=FastAPI(title="BidSaarthi API",version="0.4.0");init()
 @app.get("/health")
 def health():return {"ok":True}
 @app.get("/sources")
-def sources():return [{"id":s.id,"name":s.name,"url":s.url,"mode":s.mode} for s in SOURCES]
+def sources():return [{"id":s.id,"name":s.name,"url":s.url,"mode":s.mode,"region":s.region} for s in SOURCES]
 @app.post("/collect")
 async def collect(x_collector_token: str | None = Header(default=None)):
  expected=os.getenv("BIDSAARTHI_COLLECTOR_TOKEN", "")

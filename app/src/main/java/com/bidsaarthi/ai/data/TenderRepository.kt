@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.util.concurrent.TimeUnit
 
@@ -16,13 +17,16 @@ data class SourceSync(
     val source: TenderSource,
     val tenders: List<Tender>,
     val error: String? = null,
-    val refreshedAt: Long = 0
+    val refreshedAt: Long = 0,
+    val coverage: String = "Coverage not checked",
+    val portalTotal: Int? = null,
+    val checkedAt: String = ""
 )
 
 class TenderRepository(private val context: Context) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
     fun loadLocal(snapshot: String? = null): List<SourceSync> {
@@ -79,70 +83,50 @@ class TenderRepository(private val context: Context) {
             bucket.removeAll { it.id == t.id }; bucket.add(t)
         }
         return TenderSources.all.map { source ->
-            SourceSync(source, grouped[source.id].orEmpty(), "Saved data — refresh to verify", LocalStore(context).refreshed(source.id))
+            status(source, grouped[source.id].orEmpty())
         }
     }
 
+    private fun metadata(): Map<String, JSONObject> = runCatching {
+        val prefs=context.getSharedPreferences("bidsaarthi",Context.MODE_PRIVATE)
+        val raw=prefs.getString("source_status",null) ?: context.assets.open("source_status.json").bufferedReader().use { it.readText() }
+        val array=JSONArray(raw)
+        (0 until array.length()).map { array.getJSONObject(it) }.associateBy { it.optString("source") }
+    }.getOrDefault(emptyMap())
+
+    private fun status(source:TenderSource,items:List<Tender>,failure:String?=null):SourceSync {
+        val meta=metadata()[source.id]
+        val label=when {
+            source.kind==SourceKind.EXTERNAL_LINK -> "Portal only — not collected"
+            failure!=null -> failure
+            meta==null -> "Coverage not checked"
+            else -> meta.optString("status") + " · " + items.size + " stored · " + meta.optInt("pages",0) + " pages checked in last run"
+        }
+        return SourceSync(source,items,label,0,meta?.optString("coverage").orEmpty(),
+            if(meta!=null && !meta.isNull("portal_total")) meta.optInt("portal_total") else null,meta?.optString("checked_at").orEmpty())
+    }
+
     suspend fun syncAll(): List<SourceSync> = withContext(Dispatchers.IO) {
-        val localSyncs = loadLocal()
-        val grouped = mutableMapOf<String, MutableList<Tender>>()
-        val seenIds = mutableSetOf<String>()
-        val errors = mutableMapOf<String, String>()
-        val store = LocalStore(context)
-
-        for (sync in localSyncs) {
-            for (t in sync.tenders) {
-                if (t.id.isNotBlank() && seenIds.add(t.id)) {
-                    grouped.getOrPut(sync.source.id) { mutableListOf() }.add(t)
-                }
-            }
-        }
-
-        // Download the independently refreshed collector snapshot, so installed APKs
-        // receive state-source updates without requiring another APK installation.
+        val store=LocalStore(context)
+        val previous=loadLocal().flatMap { it.tenders }.associateBy { it.id }.toMutableMap()
+        var failure:String?=null
         try {
-            val snapshot = client.newCall(Request.Builder().url("https://raw.githubusercontent.com/ManitnjG/BidSaarthi-AI/main/app/src/main/assets/tenders.json").build()).execute().use { r ->
-                check(r.isSuccessful); r.body?.string() ?: error("Empty snapshot")
+            val root="https://raw.githubusercontent.com/ManitnjG/BidSaarthi-AI/main/app/src/main/assets/"
+            fun fetch(file:String):String=client.newCall(Request.Builder().url(root+file).build()).execute().use { r ->
+                check(r.isSuccessful) { "Feed HTTP ${r.code}" };r.body?.string() ?: error("Empty feed")
             }
-            require(JSONArray(snapshot).length() > 0)
-            for (sync in loadLocal(snapshot)) {
-                val bucket = grouped.getOrPut(sync.source.id) { mutableListOf() }
-                sync.tenders.forEach { t -> bucket.removeAll { it.id == t.id }; bucket.add(t) }
+            val snapshot=fetch("tenders.json")
+            require(JSONArray(snapshot).length()>0) { "No verified listings" }
+            loadLocal(snapshot).flatMap { it.tenders }.forEach { previous[it.id]=it }
+            runCatching {
+                val raw=fetch("source_status.json");JSONArray(raw)
+                context.getSharedPreferences("bidsaarthi",Context.MODE_PRIVATE).edit().putString("source_status",raw).apply()
             }
-        } catch (_: Exception) {
-            // Cached data is retained and never relabelled as a successful live refresh.
-        }
-
-        // Fetch live updates from CPPP and State portals
-        val liveSources = listOf(
-            Triple("cppp", "https://eprocure.gov.in/cppp/latestactivetendersnew/cpppdata", false),
-            Triple("state", "https://eprocure.gov.in/cppp/latestactivetendersnew/mmpdata", true)
-        )
-
-        for ((sourceId, url, isState) in liveSources) {
-            try {
-                val liveTenders = fetchLivePortals(url, isState)
-                if (liveTenders.isEmpty()) errors[sourceId] = "No listings returned; showing saved data"
-                else {
-                    val bucket = grouped.getOrPut(sourceId) { mutableListOf() }
-                    liveTenders.forEach { t -> bucket.removeAll { it.id == t.id }; bucket.add(0, t) }
-                    store.setRefreshed(sourceId)
-                }
-            } catch (_: Exception) {
-                errors[sourceId] = "Refresh failed; showing saved data"
-            }
-        }
-
-        store.saveTenders(grouped.values.flatten())
-        TenderSources.all.map { source ->
-            val items = grouped[source.id].orEmpty()
-            SourceSync(
-                source,
-                items,
-                errors[source.id] ?: if (source.id !in listOf("cppp", "state")) "Collector snapshot / saved data; verify freshness on portal" else null,
-                store.refreshed(source.id)
-            )
-        }
+        } catch (_:Exception) { failure="Refresh unavailable — showing stored listings" }
+        val savedIds=store.savedIds()
+        val retained=previous.values.filter { t -> t.id in savedIds || (deadlineMillis(t.deadline)?.let { it>System.currentTimeMillis()-172800000L } ?: true) }
+        store.saveTenders(retained)
+        TenderSources.all.map { source -> status(source,retained.filter { it.source==source.name },failure) }
     }
 
     private fun fetchLivePortals(url: String, isState: Boolean): List<Tender> {

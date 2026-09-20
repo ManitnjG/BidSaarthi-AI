@@ -1,89 +1,132 @@
-import asyncio,hashlib,re,httpx
+"""Public listing collector; preserves evidence and reports incomplete coverage."""
+import asyncio
+import hashlib
+import os
+import re
+from datetime import datetime, timezone
+from urllib.parse import urljoin, urlparse
+import httpx
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
 from .models import Tender
-from .sources import SOURCES,Mode
-UA="Mozilla/5.0 (compatible; BidSaarthiAI/0.4; +https://github.com/ManitnjG/BidSaarthi-AI)"
-DATE=re.compile(r"\b\d{1,2}-[A-Za-z]{3}-\d{4}\s+\d{1,2}:\d{2}\s+(?:AM|PM)\b",re.I)
-def clean(s):return re.sub(r"\s+"," ",s or "").strip()
+from .sources import SOURCES, Mode
+
+UA='Mozilla/5.0 (compatible; BidSaarthiAI/0.5; public tender discovery)'
+DATE=re.compile(r'\b\d{1,2}-[A-Za-z]{3}-\d{4}\s+\d{1,2}:\d{2}\s+(?:AM|PM)\b',re.I)
+def clean(s): return re.sub(r'\s+',' ',s or '').strip()
 def _idx(headers,*names):
- for i,h in enumerate(headers):
-  if any(n in h for n in names):return i
- return None
+    return next((i for i,h in enumerate(headers) if any(n in h for n in names)),None)
+def digest(value): return hashlib.sha256(value.encode()).hexdigest()
+
 def parse(source,html):
- soup=BeautifulSoup(html,"html.parser");out=[]
- nav_titles={"tenders by location","tenders by organisation","tenders by classification","active tenders","tenders in archive","tender status","downloads","announcements","recognitions","site compatibility"}
- for table in soup.select("table"):
-  rows=table.find_all("tr");hdr=[]
-  for r in rows:
-   hs=r.find_all("th",recursive=False)
-   if hs:hdr=[clean(x.get_text(" ",strip=True)).lower() for x in hs];break
-  ti=_idx(hdr,"tender title","title of work","work description","tender description")
-  ri=_idx(hdr,"reference no","tender ref","tender id","reference")
-  ci=_idx(hdr,"closing date","bid submission end","close date","closing")
-  oi=_idx(hdr,"opening date","bid opening","open date","opening")
-  di=_idx(hdr,"organisation name","organization name","department")
-  for row in rows:
-   cells=row.find_all("td",recursive=False)
-   if len(cells)<3:continue
-   vals=[clean(c.get_text(" ",strip=True)) for c in cells]
-   dates=[m.group(0) for v in vals for m in DATE.finditer(v)]
-   if not dates:continue
-   detail_cell=None;detail_link=None
-   for cell in cells:
-    for a in cell.select("a[href]"):
-     href=a.get("href","").lower();txt=clean(a.get_text(" ",strip=True))
-     if "directlink" in href or "tender" in href or ("view" in href and len(txt)>3):
-      detail_cell=cell;detail_link=a;break
-    if detail_cell:break
-   title=vals[ti] if ti is not None and ti<len(vals) else ""
-   ref=vals[ri] if ri is not None and ri<len(vals) else ""
-   if detail_cell is not None:
-    raw=clean(detail_cell.get_text(" ",strip=True))
-    anchor=clean(detail_link.get_text(" ",strip=True)) if detail_link else ""
-    suffix=raw[len(anchor):].lstrip(" /") if anchor and raw.startswith(anchor) else ""
-    if anchor and suffix and "/" in suffix:
-     title=anchor
-     ref=suffix.rsplit("/",1)[0].strip()
-    else:
-     parts=[clean(x) for x in raw.rsplit("/",2)]
-     if len(parts)==3:
-      if not title:title=parts[0]
-      if not ref:ref=parts[1]
-     if not title:title=anchor or raw
-   if not title:
-    candidates=[v for v in vals if len(v)>=8 and not DATE.search(v) and not re.fullmatch(r"\d+\.?",v)]
-    title=candidates[-1] if candidates else ""
-   if len(title)<8 or clean(title).lower().lstrip("0123456789. ") in nav_titles:continue
-   if not ref or len(ref)<3:continue
-   closes=DATE.search(vals[ci]).group(0) if ci is not None and ci<len(vals) and DATE.search(vals[ci]) else (DATE.search(vals[2]).group(0) if len(vals)>=6 and DATE.search(vals[2]) else dates[-1])
-   opens=DATE.search(vals[oi]).group(0) if oi is not None and oi<len(vals) and DATE.search(vals[oi]) else None
-   if not ref:
-    candidates=[v for v in vals if v!=title and not DATE.search(v) and 4<=len(v)<=120 and not any(x in v.lower() for x in ("mis reports","tenders by","downloads","site compatibility"))]
-    ref=candidates[-1] if candidates else ""
-   href=urljoin(source.url,detail_link.get("href")) if detail_link else source.url
-   if href==source.url:continue
-   evidence=" | ".join(vals)[:4000];digest=hashlib.sha256(f"{source.id}|{title}|{ref}|{closes}".encode()).hexdigest()
-   out.append(Tender(id=hashlib.sha256(f"{source.id}|{ref}".encode()).hexdigest()[:24],source_id=source.id,source_url=href,title=title[:500],department=(vals[di] if di is not None and di<len(vals) else source.name),reference_no=ref,location="Tamil Nadu" if source.id=="tn" else "India",closes_at=closes,opens_at=opens,content_hash=digest,evidence={"listing":evidence},confidence=.95))
- return list({(x.source_id,x.reference_no or x.id):x for x in out}.values())[:100]
-ENDPOINTS={
- "state":["https://eprocure.gov.in/cppp/latestactivetendersnew/mmpdata"],
- "cppp":["https://eprocure.gov.in/cppp/latestactivetendersnew/cpppdata","https://eprocure.gov.in/eprocure/app?component=view&page=Home&service=direct","https://eprocure.gov.in/epublish/app?page=FrontEndLatestActiveTenders&service=page"],
- "tn":["https://tntenders.gov.in/nicgep/app?component=view&page=Home&service=direct"],
- "maha":["https://mahatenders.gov.in/nicgep/app?component=view&page=Home&service=direct"],
- "kerala":["https://etenders.kerala.gov.in/nicgep/app?component=view&page=Home&service=direct"],
-}
-async def one(client,s):
- if s.mode==Mode.LINK_ONLY:return {"source":s.id,"status":"LINK_ONLY","items":[]}
- errors=[]
- for url in ENDPOINTS.get(s.id,[s.url]):
-  try:
-   r=await client.get(url,follow_redirects=True);r.raise_for_status()
-   proxy=type("SourceView",(),{"id":s.id,"name":s.name,"url":url})()
-   items=parse(proxy,r.text)
-   if items:return {"source":s.id,"status":"LIVE","items":items,"endpoint":url}
-   errors.append("no validated tender rows at "+url)
-  except Exception as e:errors.append(str(e)[:120])
- return {"source":s.id,"status":"EMPTY" if errors and all(x.startswith("no validated") for x in errors) else "DEGRADED","error":"; ".join(errors)[:500],"items":[]}
-async def collect_all():
- async with httpx.AsyncClient(timeout=30,headers={"User-Agent":UA,"Accept":"text/html,application/xhtml+xml"},limits=httpx.Limits(max_connections=4)) as c:return await asyncio.gather(*(one(c,s) for s in SOURCES))
+    soup=BeautifulSoup(html,'html.parser')
+    tables=soup.select('table#activeTenders') or soup.select('table')
+    out=[]
+    for table in tables:
+        if 'corrig' in str(table.get('id','')).lower(): continue
+        rows=[r for r in table.find_all('tr') if r.find_parent('table') is table]
+        hdr=[]
+        for r in rows:
+            cells=r.find_all(['th','td'],recursive=False)
+            text=[clean(c.get_text(' ',strip=True)).lower() for c in cells]
+            if r.find('th') or ('list_header' in r.get('class',[])):
+                hdr=text;break
+        ti=_idx(hdr,'tender title','title of work','work description','tender description')
+        ri=_idx(hdr,'reference no','tender ref','reference')
+        ci=_idx(hdr,'closing date','bid submission end','closing')
+        oi=_idx(hdr,'opening date','bid opening','opening')
+        di=_idx(hdr,'organisation name','organization name','department')
+        for row in rows:
+            cells=row.find_all('td',recursive=False)
+            if len(cells)<3 or any(c.find('table') for c in cells):continue
+            vals=[clean(c.get_text(' ',strip=True)) for c in cells]
+            if not any(DATE.search(v) for v in vals):continue
+            anchor=next((a for c in cells for a in c.select('a[href]') if any(k in a['href'].lower() for k in ('directlink','tender','view'))),None)
+            if anchor is None:continue
+            href=urljoin(source.url,anchor['href'])
+            if urlparse(href).scheme!='https' or urlparse(href).hostname!=urlparse(source.url).hostname:continue
+            title=clean(anchor.get_text(' ',strip=True))
+            title=re.sub(r'^\d+\.\s*','',title)
+            ref=vals[ri] if ri is not None and ri<len(vals) else ''
+            close_index=ci
+            open_index=oi
+            # NIC public homepage: title, reference, closing, opening.
+            if len(cells)==4 and DATE.search(vals[2]) and DATE.search(vals[3]):
+                ref=vals[1]; close_index=2; open_index=3
+            else:
+                cell=anchor.find_parent('td')
+                raw=clean(cell.get_text(' ',strip=True))
+                anchor_text=clean(anchor.get_text(' ',strip=True))
+                suffix=raw[len(anchor_text):].lstrip(' /') if raw.startswith(anchor_text) else ''
+                if '/' in suffix: ref=suffix.rsplit('/',1)[0].strip()
+                elif not ref and len(cells)>=6 and anchor_text.count('/')>=2:
+                    title,ref,_=anchor_text.rsplit('/',2)
+                if close_index is None and len(cells)>=6:close_index=2
+                if open_index is None and len(cells)>=6:open_index=3
+            if ti is not None and ti<len(vals) and not title:title=vals[ti]
+            if len(title)<4 or not ref or len(ref)<3:continue
+            if close_index is None or close_index>=len(vals):continue
+            closing=DATE.search(vals[close_index])
+            if not closing:continue
+            opening=DATE.search(vals[open_index]) if open_index is not None and open_index<len(vals) else None
+            evidence=' | '.join(vals)[:4000]
+            # One NIC reference may advertise several distinct lots. Do not collapse them.
+            identity=f'{source.id}|{ref}' if source.id in ('cppp','state') else f'{source.id}|{ref}|{title}'
+            department=vals[di] if di is not None and di<len(vals) else source.name
+            out.append(Tender(id=digest(identity)[:24],source_id=source.id,source_url=href,title=title[:500],
+                department=department,reference_no=ref,location=getattr(source,'region','India'),
+                closes_at=closing.group(0),opens_at=opening.group(0) if opening else None,
+                evidence={'listing':evidence},content_hash=digest(evidence),confidence=.95))
+    return list({t.id:t for t in out}.values())
+
+def next_page(html,url):
+    soup=BeautifulSoup(html,'html.parser')
+    for a in soup.select('a[href]'):
+        label=clean(a.get_text(' ',strip=True)).lower()
+        if 'next' not in label and 'next' not in a.get('rel',[]):continue
+        dest=urljoin(url,a['href'])
+        if urlparse(dest).scheme=='https' and urlparse(dest).hostname==urlparse(url).hostname and urlparse(dest).path==urlparse(url).path:
+            return dest
+    return None
+
+def portal_total(html):
+    text=BeautifulSoup(html,'html.parser').get_text(' ',strip=True)
+    m=re.search(r'Total\s+Tenders\s*:\s*([\d,]+)',text,re.I)
+    return int(m.group(1).replace(',','')) if m else None
+
+async def one(client,s,cursor=None,max_pages=30):
+    if s.mode==Mode.LINK_ONLY:return {'source':s.id,'status':'LINK_ONLY','items':[],'coverage':'Portal access only'}
+    items={};seen=set();errors=[];url=s.url;pages=0;total=None;resume=None
+    # Read latest page every run, then resume older pages from the last checkpoint.
+    if cursor and (urlparse(cursor).hostname!=urlparse(s.url).hostname or urlparse(cursor).path!=urlparse(s.url).path):cursor=None
+    while url and url not in seen and pages<max_pages:
+        seen.add(url)
+        try:
+            r=await client.get(url,follow_redirects=True);r.raise_for_status()
+            if urlparse(str(r.url)).hostname!=urlparse(s.url).hostname:raise ValueError('Unexpected portal redirect')
+            rows=parse(s,r.text)
+            pages+=1
+            total=portal_total(r.text) or total
+            if not rows:
+                errors.append('No validated public tender rows; portal may require interactive access')
+                resume=url if pages>1 else None
+                break
+            items.update({t.id:t for t in rows})
+            nxt=next_page(r.text,str(r.url))
+            if pages==1 and cursor and cursor!=s.url:nxt=cursor
+            url=nxt;resume=nxt
+            if url:await asyncio.sleep(.3)
+        except Exception as e:
+            errors.append(type(e).__name__+': '+str(e)[:160]);resume=url if pages else cursor;break
+    partial=bool(resume) or s.id not in ('cppp','state') or bool(errors)
+    return {'source':s.id,'status':('PARTIAL' if partial else 'LIVE') if items else 'UNAVAILABLE',
+            'items':list(items.values()),'error':'; '.join(errors) or None,'pages':pages,
+            'portal_total':total,'next_url':resume,'checked_at':datetime.now(timezone.utc).isoformat(),
+            'coverage':'Public listings collected; full portal coverage not verified' if partial else 'Reached end of accessible listing pages'}
+
+async def collect_all(cursors=None):
+    cursors=cursors or {};sem=asyncio.Semaphore(5)
+    max_pages=max(1,min(100,int(os.getenv('BIDSAARTHI_MAX_PAGES','30'))))
+    async with httpx.AsyncClient(timeout=20,headers={'User-Agent':UA,'Accept':'text/html'},limits=httpx.Limits(max_connections=8)) as client:
+        async def collect(s):
+            async with sem:return await one(client,s,cursors.get(s.id),max_pages)
+        return await asyncio.gather(*(collect(s) for s in SOURCES))

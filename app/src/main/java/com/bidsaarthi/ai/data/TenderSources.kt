@@ -1,22 +1,50 @@
 package com.bidsaarthi.ai.data
 
-data class TenderSource(
- val id:String, val name:String, val baseUrl:String, val kind:SourceKind,
- val enabled:Boolean=true, val note:String=""
-)
+data class TenderSource(val id:String,val name:String,val baseUrl:String,val kind:SourceKind,val region:String="India",val enabled:Boolean=true,val note:String="")
 enum class SourceKind { NIC_PUBLIC_HOME, PUBLIC_PORTAL, EXTERNAL_LINK }
-
 object TenderSources {
  val all=listOf(
-  TenderSource("cppp","CPPP / Central eProcurement","https://eprocure.gov.in/cppp/latestactivetendersnew/cpppdata",SourceKind.NIC_PUBLIC_HOME,
-   note="Official GeM-CPPP Central Active Tenders public listing."),
-  TenderSource("state","State eProcurement (MMP)","https://eprocure.gov.in/cppp/latestactivetendersnew/mmpdata",SourceKind.NIC_PUBLIC_HOME,
-   note="State Governments active tenders public listing."),
-  TenderSource("tn","Tamil Nadu eProcurement","https://tntenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME),
-  TenderSource("gem","GeM","https://gem.gov.in",SourceKind.PUBLIC_PORTAL,
-   note="Public portal connector; never bypass login/CAPTCHA."),
-  TenderSource("maha","Maharashtra eTender","https://mahatenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME),
-  TenderSource("kerala","Kerala eTenders","https://etenders.kerala.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME),
-  TenderSource("karnataka","Karnataka procurement","https://kppp.karnataka.gov.in",SourceKind.PUBLIC_PORTAL)
+  TenderSource("state","State eProcurement (MMP)","https://eprocure.gov.in/cppp/latestactivetendersnew/mmpdata",SourceKind.NIC_PUBLIC_HOME,region="India"),
+  TenderSource("cppp","CPPP / Central eProcurement","https://eprocure.gov.in/cppp/latestactivetendersnew/cpppdata",SourceKind.NIC_PUBLIC_HOME,region="India"),
+  TenderSource("tn","Tamil Nadu eProcurement","https://tntenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Tamil Nadu"),
+  TenderSource("maha","Maharashtra eProcurement","https://mahatenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Maharashtra"),
+  TenderSource("kerala","Kerala eProcurement","https://etenders.kerala.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Kerala"),
+  TenderSource("wb","West Bengal eProcurement","https://wbtenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="West Bengal"),
+  TenderSource("up","Uttar Pradesh eProcurement","https://etender.up.nic.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Uttar Pradesh"),
+  TenderSource("haryana","Haryana eProcurement","https://etenders.hry.nic.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Haryana"),
+  TenderSource("rajasthan","Rajasthan eProcurement","https://eproc.rajasthan.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Rajasthan"),
+  TenderSource("mp","Madhya Pradesh eProcurement","https://mptenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Madhya Pradesh"),
+  TenderSource("odisha","Odisha eProcurement","https://tendersodisha.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Odisha"),
+  TenderSource("assam","Assam eProcurement","https://assamtenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Assam"),
+  TenderSource("jharkhand","Jharkhand eProcurement","https://jharkhandtenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Jharkhand"),
+  TenderSource("hp","Himachal Pradesh eProcurement","https://hptenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Himachal Pradesh"),
+  TenderSource("jk","Jammu and Kashmir eProcurement","https://jktenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Jammu and Kashmir"),
+  TenderSource("punjab","Punjab eProcurement","https://eproc.punjab.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Punjab"),
+  TenderSource("goa","Goa eProcurement","https://eprocure.goa.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Goa"),
+  TenderSource("tripura","Tripura eProcurement","https://tripuratenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Tripura"),
+  TenderSource("manipur","Manipur eProcurement","https://manipurtenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Manipur"),
+  TenderSource("meghalaya","Meghalaya eProcurement","https://meghalayatenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Meghalaya"),
+  TenderSource("nagaland","Nagaland eProcurement","https://nagalandtenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Nagaland"),
+  TenderSource("arunachal","Arunachal Pradesh eProcurement","https://arunachaltenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Arunachal Pradesh"),
+  TenderSource("mizoram","Mizoram eProcurement","https://mizoramtenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Mizoram"),
+  TenderSource("sikkim","Sikkim eProcurement","https://sikkimtender.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Sikkim"),
+  TenderSource("uttarakhand","Uttarakhand eProcurement","https://uktenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Uttarakhand"),
+  TenderSource("delhi","Delhi eProcurement","https://govtprocurement.delhi.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Delhi"),
+  TenderSource("puducherry","Puducherry eProcurement","https://pudutenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Puducherry"),
+  TenderSource("chandigarh","Chandigarh eProcurement","https://etenders.chd.nic.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Chandigarh"),
+  TenderSource("andaman","Andaman and Nicobar Islands eProcurement","https://eprocure.andaman.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Andaman and Nicobar Islands"),
+  TenderSource("ladakh","Ladakh eProcurement","https://tenders.ladakh.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Ladakh"),
+  TenderSource("lakshadweep","Lakshadweep eProcurement","https://tendersutl.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Lakshadweep"),
+  TenderSource("dnh","Dadra and Nagar Haveli and Daman and Diu eProcurement","https://dnhtenders.gov.in/nicgep/app",SourceKind.NIC_PUBLIC_HOME,region="Dadra and Nagar Haveli and Daman and Diu"),
+  TenderSource("gem","GeM","https://bidplus.gem.gov.in/all-bids",SourceKind.EXTERNAL_LINK,region="India"),
+  TenderSource("karnataka","Karnataka procurement","https://kppp.karnataka.gov.in",SourceKind.EXTERNAL_LINK,region="Karnataka"),
+  TenderSource("gujarat","Gujarat nProcure","https://tender.nprocure.com",SourceKind.EXTERNAL_LINK,region="Gujarat"),
+  TenderSource("ap","Andhra Pradesh eProcurement","https://tender.apeprocurement.gov.in",SourceKind.EXTERNAL_LINK,region="Andhra Pradesh"),
+  TenderSource("telangana","Telangana eProcurement","https://tender.telangana.gov.in",SourceKind.EXTERNAL_LINK,region="Telangana"),
+  TenderSource("bihar","Bihar eProcurement","https://eproc2.bihar.gov.in",SourceKind.EXTERNAL_LINK,region="Bihar"),
+  TenderSource("cg","Chhattisgarh eProcurement","https://eproc.cgstate.gov.in",SourceKind.EXTERNAL_LINK,region="Chhattisgarh"),
+  TenderSource("ireps","Indian Railways IREPS","https://www.ireps.gov.in",SourceKind.EXTERNAL_LINK,region="India"),
+  TenderSource("wb_new","West Bengal new procurement portal","https://tenders.wb.gov.in",SourceKind.EXTERNAL_LINK,region="West Bengal"),
  )
+ val regions=all.map { it.region }.filter { it!="India" }.distinct().sorted()
 }
