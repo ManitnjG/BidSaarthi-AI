@@ -3,14 +3,14 @@ from .models import Analysis,Tender,BusinessDNA
 from .basic_analysis import basic_analysis
 
 SCHEMA={"type":"object","additionalProperties":False,"properties":{
-"value":{"type":["string","null"]},"emd":{"type":["string","null"]},"fee":{"type":["string","null"]},
+"value":{"type":["string","null"]},"emd":{"type":["string","null"]},"fee":{"type":["string","null"]},"reference_no":{"type":["string","null"]},
 "category":{"type":["string","null"]},"state":{"type":["string","null"]},
 "turnover_required":{"type":["number","null"]},"experience_required":{"type":["string","null"]},
 "gst_required":{"type":["boolean","null"]},"udyam_required":{"type":["boolean","null"]},
 "eligibility_notes":{"type":"array","items":{"type":"string"}},"required_documents":{"type":"array","items":{"type":"string"}},
 "risks":{"type":"array","items":{"type":"string"}},"summary":{"type":"string"},
 "evidence":{"type":"object","additionalProperties":{"type":"string"}}},
-"required":["value","emd","fee","category","state","turnover_required","experience_required","gst_required","udyam_required","eligibility_notes","required_documents","risks","summary","evidence"]}
+"required":["value","emd","fee","reference_no","category","state","turnover_required","experience_required","gst_required","udyam_required","eligibility_notes","required_documents","risks","summary","evidence"]}
 
 # Strict structured output requires fixed keys, including evidence.
 _evidence_fields = [key for key in SCHEMA["properties"] if key != "evidence"]
@@ -95,7 +95,7 @@ Evidence values must be short exact excerpts copied from the listing."""
   if not content: raise ValueError("OpenRouter returned no analysis content")
   out=json.loads(content)
   # Normalize every expected field before evidence validation.
-  for field in ("value","emd","fee","category","state","turnover_required","experience_required","gst_required","udyam_required"):
+  for field in ("value","emd","fee","reference_no","category","state","turnover_required","experience_required","gst_required","udyam_required"):
    out.setdefault(field,None)
   for field in ("eligibility_notes","required_documents","risks"):
    if not isinstance(out.get(field),list): out[field]=[]
@@ -105,7 +105,17 @@ Evidence values must be short exact excerpts copied from the listing."""
   out["evidence"]=ev
   for field in ("turnover_required","experience_required","gst_required","udyam_required","value","emd","fee"):
    if field not in ev: out[field]=None
-  # Arrays may contain multiple facts, so retain only when at least one exact supporting excerpt is present.
+  # Money fields must look like monetary values. Slash-delimited tender references
+  # must never be accepted as EMD, fee or tender value.
+  money_re=re.compile(r"(?:₹|rs\\.?|inr|lakh|crore|\\b\\d[\\d,]*(?:\\.\\d+)?\\s*(?:/-)?\\b)",re.I)
+  ref_re=re.compile(r"^[A-Z0-9()._-]+(?:/[A-Z0-9()._-]+){2,}$",re.I)
+  for field in ("value","emd","fee"):
+   val=out.get(field)
+   if isinstance(val,str) and (ref_re.fullmatch(val.strip()) or not money_re.search(val)):
+    out[field]=None; out["evidence"].pop(field,None)
+  if not out.get("reference_no") and t.reference_no:
+   out["reference_no"]=t.reference_no
+    # Arrays may contain multiple facts, so retain only when at least one exact supporting excerpt is present.
   for field in ("required_documents","eligibility_notes","risks"):
    if field not in ev: out[field]=[]
   return out
