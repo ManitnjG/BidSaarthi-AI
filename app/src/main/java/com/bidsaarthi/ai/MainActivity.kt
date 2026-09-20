@@ -183,7 +183,7 @@ class MainActivity: ComponentActivity() {
     FilledTonalButton(enabled=!loading,onClick={scope.launch { loading=true;error=null
      try {
       val key=FreeAiKeyStore(ctx).read()
-      result=if(key.isNullOrBlank()) BackendApi(BuildConfig.BACKEND_URL).analyze(t,profile) else FreeAiClient().analyze(t,profile,key)
+      result=BackendApi(BuildConfig.BACKEND_URL).analyze(t,profile)
      }
      catch(e:Exception) { result=basicAnalysis(t,profile,"Online AI is unavailable. Showing offline checks.");error=e.message ?: "Analysis failed. Please retry." }
      finally { loading=false }
