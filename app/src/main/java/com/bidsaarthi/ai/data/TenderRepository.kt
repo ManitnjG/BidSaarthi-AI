@@ -76,14 +76,14 @@ class TenderRepository(private val context: Context) {
         } catch (_: Exception) {
         }
 
+        val indexed=grouped.mapValues { (_,items) -> items.associateBy { it.id }.toMutableMap() }.toMutableMap()
         val cached = if(snapshot == null) LocalStore(context).tenders() else emptyList()
         for (t in cached) {
             val source = TenderSources.all.firstOrNull { it.name == t.source } ?: continue
-            val bucket = grouped.getOrPut(source.id) { mutableListOf() }
-            bucket.removeAll { it.id == t.id }; bucket.add(t)
+            indexed.getOrPut(source.id) { linkedMapOf() }[t.id]=t
         }
         return TenderSources.all.map { source ->
-            status(source, grouped[source.id].orEmpty())
+            status(source, indexed[source.id]?.values?.toList().orEmpty())
         }
     }
 
@@ -117,7 +117,13 @@ class TenderRepository(private val context: Context) {
             }
             val snapshot=fetch("tenders.json")
             require(JSONArray(snapshot).length()>0) { "No verified listings" }
-            loadLocal(snapshot).flatMap { it.tenders }.forEach { previous[it.id]=it }
+            val incoming=loadLocal(snapshot).flatMap { it.tenders }
+            fun signature(t:Tender)=listOf(t.source,t.summary.substringBefore(" • "),t.title,t.department)
+            val freshIds=incoming.map { it.id }.toSet()
+            val freshSignatures=incoming.map { signature(it) }.toSet()
+            val saved=store.savedIds()
+            previous.entries.removeAll { (id,t) -> id !in freshIds && id !in saved && signature(t) in freshSignatures }
+            incoming.forEach { previous[it.id]=it }
             runCatching {
                 val raw=fetch("source_status.json");JSONArray(raw)
                 context.getSharedPreferences("bidsaarthi",Context.MODE_PRIVATE).edit().putString("source_status",raw).apply()

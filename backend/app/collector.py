@@ -47,6 +47,7 @@ def parse(source,html):
             title=clean(anchor.get_text(' ',strip=True))
             title=re.sub(r'^\d+\.\s*','',title)
             ref=vals[ri] if ri is not None and ri<len(vals) else ''
+            official_id=''
             close_index=ci
             open_index=oi
             # NIC public homepage: title, reference, closing, opening.
@@ -57,9 +58,10 @@ def parse(source,html):
                 raw=clean(cell.get_text(' ',strip=True))
                 anchor_text=clean(anchor.get_text(' ',strip=True))
                 suffix=raw[len(anchor_text):].lstrip(' /') if raw.startswith(anchor_text) else ''
-                if '/' in suffix: ref=suffix.rsplit('/',1)[0].strip()
+                if '/' in suffix:
+                    ref,official_id=(part.strip() for part in suffix.rsplit('/',1))
                 elif not ref and len(cells)>=6 and anchor_text.count('/')>=2:
-                    title,ref,_=anchor_text.rsplit('/',2)
+                    title,ref,official_id=anchor_text.rsplit('/',2)
                 if close_index is None and len(cells)>=6:close_index=2
                 if open_index is None and len(cells)>=6:open_index=3
             if ti is not None and ti<len(vals) and not title:title=vals[ti]
@@ -69,10 +71,10 @@ def parse(source,html):
             if not closing:continue
             opening=DATE.search(vals[open_index]) if open_index is not None and open_index<len(vals) else None
             evidence=' | '.join(vals)[:4000]
-            # One NIC reference may advertise several distinct lots. Do not collapse them.
-            identity=f'{source.id}|{ref}' if source.id in ('cppp','state') else f'{source.id}|{ref}|{title}'
             department=vals[di] if di is not None and di<len(vals) else source.name
-            out.append(Tender(id=digest(identity)[:24],source_id=source.id,source_url=href,title=title[:500],
+            # References can be reused by different authorities and by separate lots.
+            identity=f'{source.id}|{official_id}|{department}' if official_id else f'{source.id}|{ref}|{title}|{department}'
+            out.append(Tender(id=digest(identity)[:24],official_id=official_id,source_id=source.id,source_url=href,title=title[:500],
                 department=department,reference_no=ref,location=getattr(source,'region','India'),
                 closes_at=closing.group(0),opens_at=opening.group(0) if opening else None,
                 evidence={'listing':evidence},content_hash=digest(evidence),confidence=.95))

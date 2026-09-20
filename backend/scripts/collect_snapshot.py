@@ -20,6 +20,18 @@ def retain(t):
         except ValueError:continue
     return True
 
+def dedupe_rows(rows):
+    rows=list(rows)
+    def signature(row):return (row['source_id'],row.get('reference_no'),row.get('title'),row.get('department'))
+    newer={signature(row) for row in rows if row.get('official_id')}
+    unique={}
+    for row in rows:
+        sig=signature(row)
+        if not row.get('official_id') and sig in newer:continue
+        key=(row['source_id'],row['official_id'],row.get('department')) if row.get('official_id') else sig
+        unique[key]=row
+    return list(unique.values())
+
 async def main():
     previous=read('tenders.json',[]);cursors=read('collection_cursors.json',{})
     results=await collect_all(cursors)
@@ -34,6 +46,9 @@ async def main():
         status['count']=len(result['items'])
         status['stored_count']=sum(t['source_id']==result['source'] for t in rows.values())
         statuses.append(status)
+    rows={row['id']:row for row in dedupe_rows(rows.values())}
+    for status in statuses:
+        status['stored_count']=sum(t['source_id']==status['source'] for t in rows.values())
     ROOT.mkdir(parents=True,exist_ok=True)
     for name,data in [('tenders.json',list(rows.values())),('source_status.json',statuses),('collection_cursors.json',cursors),
         ('sources.json',[{'id':s.id,'name':s.name,'url':s.url,'mode':s.mode.value,'region':s.region} for s in SOURCES])]:

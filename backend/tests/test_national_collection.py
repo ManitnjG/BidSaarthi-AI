@@ -48,3 +48,19 @@ def test_registry_covers_36_regions_without_claiming_all_are_feeds():
     assert len({s.region for s in SOURCES if s.region!='India'})==36
     assert source('gem').mode.value=='LINK_ONLY'
     assert source('ireps').mode.value=='LINK_ONLY'
+
+
+def test_same_reference_never_collapses_different_official_tenders():
+    def row(tender_id,dept):
+        return f'<tr><td>1</td><td>20-Sep-2026 10:00 AM</td><td>30-Sep-2026 05:00 PM</td><td>01-Oct-2026 10:00 AM</td><td><a href="/cppp/tendersfullview/{tender_id}">Solar works</a>/REF/2026/{tender_id}</td><td>{dept}</td></tr>'
+    header='<tr><th>No</th><th>Published</th><th>Closing Date</th><th>Opening Date</th><th>Title</th><th>Organisation Name</th></tr>'
+    rows=parse(source('state'),'<table>'+header+row('ID001','Authority One')+row('ID002','Authority One')+row('ID001','Authority Two')+'</table>')
+    assert len(rows)==3
+    assert len({t.id for t in rows})==3
+
+
+def test_snapshot_migration_preserves_distinct_official_ids():
+    from scripts.collect_snapshot import dedupe_rows
+    base={'source_id':'state','reference_no':'REF1','title':'Solar works','department':'Authority'}
+    rows=[dict(base,id='old'),dict(base,id='new1',official_id='ID1'),dict(base,id='new2',official_id='ID2')]
+    assert {r['id'] for r in dedupe_rows(rows)}=={'new1','new2'}

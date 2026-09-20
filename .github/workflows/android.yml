@@ -42,6 +42,9 @@ jobs:
           gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --title "BidSaarthi AI Build ${{ github.run_number }}" --notes "Automated Android debug build."
 
   collect-real-tenders:
+    concurrency:
+      group: tender-data-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
