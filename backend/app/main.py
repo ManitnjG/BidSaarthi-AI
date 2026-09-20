@@ -4,11 +4,11 @@ import secrets
 from .analysis_service import ListingRequest,analyze_listing
 from .collector import collect_all
 from .engine import dedupe,match
-from .models import BusinessDNA,Tender
+from .models import BusinessDNA,Tender,Entitlement
 from .llm import analyze
 from .sources import SOURCES
 from .store import init,upsert,list_tenders,get_tender,has_changes
-app=FastAPI(title="BidSaarthi API",version="0.4.0");init()
+app=FastAPI(title="BidSaarthi API",version="1.0.0",description="Evidence-first Indian tender intelligence API. Official issuing authorities remain authoritative.");init()
 @app.get("/health")
 def health():return {"ok":True}
 @app.get("/sources")
@@ -52,3 +52,44 @@ def alerts(limit:int=200):
 @app.post("/analyze-listing")
 async def listing_analysis(payload:ListingRequest,request:Request):
  return await analyze_listing(payload,request)
+
+
+# Versioned production API. Legacy routes remain during the Android migration.
+@app.get("/api/v1/health")
+def v1_health():
+ return {"ok":True,"api_version":"v1","service":"BidSaarthi","government_affiliation":False}
+
+@app.get("/api/v1/tenders")
+def v1_tenders(q:str="",limit:int=50,offset:int=0,source_id:str|None=None,state:str|None=None):
+ limit=max(1,min(limit,100));offset=max(0,offset)
+ rows=list_tenders(q, min(offset+limit,1000))
+ if source_id: rows=[x for x in rows if x.get("source_id")==source_id]
+ if state: rows=[x for x in rows if state.lower() in (x.get("location") or "").lower()]
+ page=rows[offset:offset+limit]
+ return {"items":page,"count":len(page),"offset":offset,"limit":limit,"disclaimer":"Verify all requirements and amendments with the issuing authority."}
+
+@app.get("/api/v1/tenders/{tender_id}")
+def v1_tender(tender_id:str):
+ raw=get_tender(tender_id)
+ if not raw: raise HTTPException(404,"Tender not found")
+ return raw
+
+@app.post("/api/v1/matches")
+def v1_matches(b:BusinessDNA,limit:int=50):
+ rows=[match(Tender(**x),b) for x in list_tenders(limit=min(max(limit,1),100))]
+ return {"items":sorted(rows,key=lambda x:x.score,reverse=True),"eligibility_note":"Match score is relevance, not proof of tender eligibility."}
+
+@app.get("/api/v1/subscription")
+def v1_subscription():
+ # Server-authoritative default until a verified billing identity is attached.
+ return Entitlement()
+
+@app.get("/api/v1/usage")
+def v1_usage():
+ return {"ai_used":0,"ai_limit":0,"plan":"FREE","note":"Authenticated usage accounting is required before paid entitlements are enabled."}
+
+@app.post("/api/v1/tenders/{tender_id}/analyze")
+async def v1_analysis(tender_id:str,request:Request,business:BusinessDNA|None=None):
+ raw=get_tender(tender_id)
+ if not raw: raise HTTPException(404,"Tender not found")
+ return await analyze_listing(ListingRequest(tender=Tender(**raw),business=business or BusinessDNA()),request)
