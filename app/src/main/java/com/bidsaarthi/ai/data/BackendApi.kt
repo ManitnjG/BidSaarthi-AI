@@ -8,7 +8,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 class BackendApi(private val baseUrl:String) {
- private val client=OkHttpClient.Builder().connectTimeout(20,TimeUnit.SECONDS).readTimeout(75,TimeUnit.SECONDS).build()
+ private val client=OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(50,TimeUnit.SECONDS).writeTimeout(15,TimeUnit.SECONDS).callTimeout(60,TimeUnit.SECONDS).build()
  suspend fun analyze(t:Tender, profile:JSONObject):JSONObject=withContext(Dispatchers.IO) {
   val tender=JSONObject().put("id",t.id).put("source_id",t.source).put("source_url",t.url).put("title",t.title)
    .put("department",t.department).put("location",t.location).put("closes_at",t.deadline)
